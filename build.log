@@ -1,0 +1,2143 @@
+Input changed VB_ENABLED to false
+
+[1;33mSetup[0m
+
+
+[1;33mCloning Clang and Kernel in parallel...[0m
+
+fatal: destination path '/home/dr4d/KernelOwO/Protium' already exists and is not an empty directory.
+
+[1;33mClone completed[0m
+
+
+[1;33mKernel Version: 5.4.302[0m
+
+
+[1;33mKernelSU[0m
+
+
+[1;33mImporting KernelSU...[0m
+
+
+[1;33mKernelSU Version: 32472[0m
+
+
+[1;33mAdding Docker and RAM optimizations...[0m
+
+
+[1;33mNonVB[0m
+
+
+[1;33mBuild[0m
+
+  GEN     Makefile
+  HOSTCC  scripts/basic/fixdep
+  HOSTCC  scripts/kconfig/conf.o
+  HOSTCC  scripts/kconfig/confdata.o
+  HOSTCC  scripts/kconfig/expr.o
+  LEX     scripts/kconfig/lexer.lex.c
+  YACC    scripts/kconfig/parser.tab.[ch]
+  HOSTCC  scripts/kconfig/lexer.lex.o
+  HOSTCC  scripts/kconfig/parser.tab.o
+  HOSTCC  scripts/kconfig/preprocess.o
+  HOSTCC  scripts/kconfig/symbol.o
+  HOSTLD  scripts/kconfig/conf
+arch/arm64/configs/moonstone_defconfig:835:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:836:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:840:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:842:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:843:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:844:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:845:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:846:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:848:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:849:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:850:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:851:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:852:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:855:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:856:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:857:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:858:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:859:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:860:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:861:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:862:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:863:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:864:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:865:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:866:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:867:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:868:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:869:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:870:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:871:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:872:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:873:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:874:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:875:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:876:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:885:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:902:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:903:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:911:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:912:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:913:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:914:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:915:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:916:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:917:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:918:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:919:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:920:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:921:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:922:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:923:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:924:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:925:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:926:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:927:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:928:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:929:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:930:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:931:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:932:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:933:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:936:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:936:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:937:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:938:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:939:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:940:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:941:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:944:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:945:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:946:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:947:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:948:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:949:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:950:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:951:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:952:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:953:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:954:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:955:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:956:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:957:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:958:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:959:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:960:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:961:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:962:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:963:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:964:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:965:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:966:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:967:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:968:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:969:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:970:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:971:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:972:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:973:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:974:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:975:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:976:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:977:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:978:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:979:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:980:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:981:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:982:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:983:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:984:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:985:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:986:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:987:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:988:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:989:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:992:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:992:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:993:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:994:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:995:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:996:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:997:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:998:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1005:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1006:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1007:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1008:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1009:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1010:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1011:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1012:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1013:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1014:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1015:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1016:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1017:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1018:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1019:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1020:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1021:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1022:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1023:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1024:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1025:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1026:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1027:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1028:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1029:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:1030:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:1031:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:1032:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:1033:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:1034:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:1035:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:1036:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:1037:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:1038:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:1039:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:1040:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:1041:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:1042:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:1043:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:1044:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:1045:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:1046:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:1047:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1048:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:1049:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:1050:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:1053:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:1053:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:1054:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:1055:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:1056:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:1057:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:1058:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:1059:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1060:warning: override: reassigning to symbol PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1061:warning: override: reassigning to symbol HW_PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1062:warning: override: reassigning to symbol ARM_PMU
+arch/arm64/configs/moonstone_defconfig:1063:warning: override: reassigning to symbol ARM_PMU_ACPI
+arch/arm64/configs/moonstone_defconfig:1066:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1067:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1068:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1069:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1070:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1071:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1072:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1073:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1074:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1075:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1076:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1077:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1078:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1079:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1080:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1081:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1082:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1083:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1084:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1085:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1086:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1087:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1088:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1089:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1090:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:1091:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:1092:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:1093:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:1094:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:1095:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:1096:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:1097:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:1098:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:1099:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:1100:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:1101:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:1102:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:1103:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:1104:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:1105:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:1106:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:1107:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:1108:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1109:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:1110:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:1111:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:1114:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:1114:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:1115:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:1116:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:1117:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:1118:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:1119:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:1120:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1121:warning: override: reassigning to symbol PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1122:warning: override: reassigning to symbol HW_PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1123:warning: override: reassigning to symbol ARM_PMU
+arch/arm64/configs/moonstone_defconfig:1124:warning: override: reassigning to symbol ARM_PMU_ACPI
+arch/arm64/configs/moonstone_defconfig:1127:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1128:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1129:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1130:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1131:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1132:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1133:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1134:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1135:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1136:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1137:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1138:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1139:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1140:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1141:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1142:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1143:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1144:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1145:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1146:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1147:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1148:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1149:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1150:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1151:warning: override: reassigning to symbol BLK_DEV_INITRD
+arch/arm64/configs/moonstone_defconfig:1154:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:1155:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:1156:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:1157:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:1158:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:1159:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:1160:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:1161:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:1162:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:1163:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:1164:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:1165:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:1166:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:1167:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:1168:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:1169:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:1170:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:1171:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:1172:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1173:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:1174:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:1175:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:1178:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:1178:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:1179:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:1180:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:1181:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:1182:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:1183:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:1184:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1185:warning: override: reassigning to symbol PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1186:warning: override: reassigning to symbol HW_PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1187:warning: override: reassigning to symbol ARM_PMU
+arch/arm64/configs/moonstone_defconfig:1188:warning: override: reassigning to symbol ARM_PMU_ACPI
+arch/arm64/configs/moonstone_defconfig:1191:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1192:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1193:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1194:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1195:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1196:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1197:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1198:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1199:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1200:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1201:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1202:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1203:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1204:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1205:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1206:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1207:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1208:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1209:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1210:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1211:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1212:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1213:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1214:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1215:warning: override: reassigning to symbol BLK_DEV_INITRD
+arch/arm64/configs/moonstone_defconfig:1216:warning: override: reassigning to symbol INITRAMFS_SOURCE
+arch/arm64/configs/moonstone_defconfig:1217:warning: override: reassigning to symbol INITRAMFS_COMPRESSION_GZIP
+arch/arm64/configs/moonstone_defconfig:1217:warning: override: INITRAMFS_COMPRESSION_GZIP changes choice state
+arch/arm64/configs/moonstone_defconfig:1218:warning: override: reassigning to symbol VT
+arch/arm64/configs/moonstone_defconfig:1223:warning: override: reassigning to symbol DRM_FBDEV_EMULATION
+arch/arm64/configs/moonstone_defconfig:1225:warning: override: reassigning to symbol INPUT_EVDEV
+arch/arm64/configs/moonstone_defconfig:1227:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:1228:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:1229:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:1230:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:1231:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:1232:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:1233:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:1234:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:1235:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:1236:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:1237:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:1238:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:1239:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:1240:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:1241:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:1242:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:1243:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:1244:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:1245:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1246:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:1247:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:1248:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:1251:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:1251:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:1252:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:1253:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:1254:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:1255:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:1256:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:1257:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1258:warning: override: reassigning to symbol PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1259:warning: override: reassigning to symbol HW_PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1260:warning: override: reassigning to symbol ARM_PMU
+arch/arm64/configs/moonstone_defconfig:1261:warning: override: reassigning to symbol ARM_PMU_ACPI
+arch/arm64/configs/moonstone_defconfig:1264:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1265:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1266:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1267:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1268:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1269:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1270:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1271:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1272:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1273:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1274:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1275:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1276:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1277:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1278:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1279:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1280:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1281:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1282:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1283:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1284:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1285:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1286:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1287:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1288:warning: override: reassigning to symbol BLK_DEV_INITRD
+arch/arm64/configs/moonstone_defconfig:1289:warning: override: reassigning to symbol INITRAMFS_SOURCE
+arch/arm64/configs/moonstone_defconfig:1290:warning: override: reassigning to symbol INITRAMFS_COMPRESSION_GZIP
+arch/arm64/configs/moonstone_defconfig:1290:warning: override: INITRAMFS_COMPRESSION_GZIP changes choice state
+arch/arm64/configs/moonstone_defconfig:1291:warning: override: reassigning to symbol VT
+arch/arm64/configs/moonstone_defconfig:1292:warning: override: reassigning to symbol VT_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1293:warning: override: reassigning to symbol HW_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1294:warning: override: reassigning to symbol FRAMEBUFFER_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1295:warning: override: reassigning to symbol FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+arch/arm64/configs/moonstone_defconfig:1296:warning: override: reassigning to symbol DRM_FBDEV_EMULATION
+arch/arm64/configs/moonstone_defconfig:1297:warning: override: reassigning to symbol DRM_FBDEV_OVERALLOC
+arch/arm64/configs/moonstone_defconfig:1298:warning: override: reassigning to symbol INPUT_EVDEV
+arch/arm64/configs/moonstone_defconfig:1299:warning: override: reassigning to symbol INPUT_KEYBOARD
+arch/arm64/configs/moonstone_defconfig:1300:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:1301:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:1302:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:1303:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:1304:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:1305:warning: override: reassigning to symbol LOCALVERSION
+arch/arm64/configs/moonstone_defconfig:1306:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:1307:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:1308:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:1309:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:1310:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:1311:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:1312:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:1313:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:1314:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:1315:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:1316:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:1317:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:1318:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:1319:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1320:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:1321:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:1322:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:1325:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:1325:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:1326:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:1327:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:1328:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:1329:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:1330:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:1331:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1332:warning: override: reassigning to symbol PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1333:warning: override: reassigning to symbol HW_PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1334:warning: override: reassigning to symbol ARM_PMU
+arch/arm64/configs/moonstone_defconfig:1335:warning: override: reassigning to symbol ARM_PMU_ACPI
+arch/arm64/configs/moonstone_defconfig:1338:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1339:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1340:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1341:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1342:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1343:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1344:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1345:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1346:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1347:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1348:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1349:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1350:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1351:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1352:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1353:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1354:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1355:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1356:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1357:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1358:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1359:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1360:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1361:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1362:warning: override: reassigning to symbol BLK_DEV_INITRD
+arch/arm64/configs/moonstone_defconfig:1363:warning: override: reassigning to symbol INITRAMFS_SOURCE
+arch/arm64/configs/moonstone_defconfig:1364:warning: override: reassigning to symbol INITRAMFS_COMPRESSION_GZIP
+arch/arm64/configs/moonstone_defconfig:1364:warning: override: INITRAMFS_COMPRESSION_GZIP changes choice state
+arch/arm64/configs/moonstone_defconfig:1365:warning: override: reassigning to symbol VT
+arch/arm64/configs/moonstone_defconfig:1366:warning: override: reassigning to symbol VT_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1367:warning: override: reassigning to symbol HW_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1368:warning: override: reassigning to symbol FRAMEBUFFER_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1369:warning: override: reassigning to symbol FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+arch/arm64/configs/moonstone_defconfig:1370:warning: override: reassigning to symbol DRM_FBDEV_EMULATION
+arch/arm64/configs/moonstone_defconfig:1371:warning: override: reassigning to symbol DRM_FBDEV_OVERALLOC
+arch/arm64/configs/moonstone_defconfig:1372:warning: override: reassigning to symbol INPUT_EVDEV
+arch/arm64/configs/moonstone_defconfig:1373:warning: override: reassigning to symbol INPUT_KEYBOARD
+arch/arm64/configs/moonstone_defconfig:1374:warning: override: reassigning to symbol KSU
+arch/arm64/configs/moonstone_defconfig:1375:warning: override: reassigning to symbol KSU_EXTRAS
+arch/arm64/configs/moonstone_defconfig:1376:warning: override: reassigning to symbol KSU_TAMPER_SYSCALL_TABLE
+arch/arm64/configs/moonstone_defconfig:1377:warning: override: reassigning to symbol KSU_THRONE_TRACKER_ALWAYS_THREADED
+arch/arm64/configs/moonstone_defconfig:1378:warning: override: reassigning to symbol KPROBES
+arch/arm64/configs/moonstone_defconfig:1379:warning: override: reassigning to symbol LOCALVERSION
+arch/arm64/configs/moonstone_defconfig:1380:warning: override: reassigning to symbol NAMESPACES
+arch/arm64/configs/moonstone_defconfig:1381:warning: override: reassigning to symbol USER_NS
+arch/arm64/configs/moonstone_defconfig:1382:warning: override: reassigning to symbol UTS_NS
+arch/arm64/configs/moonstone_defconfig:1383:warning: override: reassigning to symbol IPC_NS
+arch/arm64/configs/moonstone_defconfig:1384:warning: override: reassigning to symbol PID_NS
+arch/arm64/configs/moonstone_defconfig:1385:warning: override: reassigning to symbol NET_NS
+arch/arm64/configs/moonstone_defconfig:1386:warning: override: reassigning to symbol CGROUPS
+arch/arm64/configs/moonstone_defconfig:1387:warning: override: reassigning to symbol MEMCG
+arch/arm64/configs/moonstone_defconfig:1388:warning: override: reassigning to symbol MEMCG_SWAP
+arch/arm64/configs/moonstone_defconfig:1389:warning: override: reassigning to symbol CGROUP_FREEZER
+arch/arm64/configs/moonstone_defconfig:1390:warning: override: reassigning to symbol CPUSETS
+arch/arm64/configs/moonstone_defconfig:1391:warning: override: reassigning to symbol CGROUP_PIDS
+arch/arm64/configs/moonstone_defconfig:1392:warning: override: reassigning to symbol VETH
+arch/arm64/configs/moonstone_defconfig:1393:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1394:warning: override: reassigning to symbol OVERLAY_FS
+arch/arm64/configs/moonstone_defconfig:1395:warning: override: reassigning to symbol EXT4_FS_POSIX_ACL
+arch/arm64/configs/moonstone_defconfig:1396:warning: override: reassigning to symbol EXT4_FS_SECURITY
+arch/arm64/configs/moonstone_defconfig:1399:warning: override: reassigning to symbol HZ_300
+arch/arm64/configs/moonstone_defconfig:1399:warning: override: HZ_300 changes choice state
+arch/arm64/configs/moonstone_defconfig:1400:warning: override: reassigning to symbol HZ
+arch/arm64/configs/moonstone_defconfig:1401:warning: override: reassigning to symbol WQ_POWER_EFFICIENT_DEFAULT
+arch/arm64/configs/moonstone_defconfig:1402:warning: override: reassigning to symbol DEBUG_KERNEL
+arch/arm64/configs/moonstone_defconfig:1403:warning: override: reassigning to symbol DEBUG_MISC
+arch/arm64/configs/moonstone_defconfig:1404:warning: override: reassigning to symbol SLUB_DEBUG
+arch/arm64/configs/moonstone_defconfig:1405:warning: override: reassigning to symbol PROFILING
+arch/arm64/configs/moonstone_defconfig:1406:warning: override: reassigning to symbol PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1407:warning: override: reassigning to symbol HW_PERF_EVENTS
+arch/arm64/configs/moonstone_defconfig:1408:warning: override: reassigning to symbol ARM_PMU
+arch/arm64/configs/moonstone_defconfig:1409:warning: override: reassigning to symbol ARM_PMU_ACPI
+arch/arm64/configs/moonstone_defconfig:1412:warning: override: reassigning to symbol VIRTUALIZATION
+arch/arm64/configs/moonstone_defconfig:1413:warning: override: reassigning to symbol KVM
+arch/arm64/configs/moonstone_defconfig:1414:warning: override: reassigning to symbol KVM_ARM_HOST
+arch/arm64/configs/moonstone_defconfig:1415:warning: override: reassigning to symbol VHOST_NET
+arch/arm64/configs/moonstone_defconfig:1416:warning: override: reassigning to symbol VIRTIO
+arch/arm64/configs/moonstone_defconfig:1417:warning: override: reassigning to symbol VIRTIO_PCI
+arch/arm64/configs/moonstone_defconfig:1418:warning: override: reassigning to symbol VIRTIO_BLK
+arch/arm64/configs/moonstone_defconfig:1419:warning: override: reassigning to symbol VIRTIO_NET
+arch/arm64/configs/moonstone_defconfig:1420:warning: override: reassigning to symbol VIRTIO_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1421:warning: override: reassigning to symbol VIRTIO_BALLOON
+arch/arm64/configs/moonstone_defconfig:1422:warning: override: reassigning to symbol SYSVIPC
+arch/arm64/configs/moonstone_defconfig:1423:warning: override: reassigning to symbol SYSVIPC_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1424:warning: override: reassigning to symbol POSIX_MQUEUE
+arch/arm64/configs/moonstone_defconfig:1425:warning: override: reassigning to symbol POSIX_MQUEUE_SYSCTL
+arch/arm64/configs/moonstone_defconfig:1426:warning: override: reassigning to symbol TUN
+arch/arm64/configs/moonstone_defconfig:1427:warning: override: reassigning to symbol BRIDGE
+arch/arm64/configs/moonstone_defconfig:1428:warning: override: reassigning to symbol BRIDGE_NETFILTER
+arch/arm64/configs/moonstone_defconfig:1429:warning: override: reassigning to symbol SWAP
+arch/arm64/configs/moonstone_defconfig:1430:warning: override: reassigning to symbol ZSWAP
+arch/arm64/configs/moonstone_defconfig:1431:warning: override: reassigning to symbol ZPOOL
+arch/arm64/configs/moonstone_defconfig:1432:warning: override: reassigning to symbol FRONTSWAP
+arch/arm64/configs/moonstone_defconfig:1433:warning: override: reassigning to symbol NTFS_FS
+arch/arm64/configs/moonstone_defconfig:1434:warning: override: reassigning to symbol NTFS_RW
+arch/arm64/configs/moonstone_defconfig:1435:warning: override: reassigning to symbol EXFAT_FS
+arch/arm64/configs/moonstone_defconfig:1436:warning: override: reassigning to symbol BLK_DEV_INITRD
+arch/arm64/configs/moonstone_defconfig:1437:warning: override: reassigning to symbol INITRAMFS_SOURCE
+arch/arm64/configs/moonstone_defconfig:1438:warning: override: reassigning to symbol INITRAMFS_COMPRESSION_GZIP
+arch/arm64/configs/moonstone_defconfig:1438:warning: override: INITRAMFS_COMPRESSION_GZIP changes choice state
+arch/arm64/configs/moonstone_defconfig:1439:warning: override: reassigning to symbol VT
+arch/arm64/configs/moonstone_defconfig:1440:warning: override: reassigning to symbol VT_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1441:warning: override: reassigning to symbol HW_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1442:warning: override: reassigning to symbol FRAMEBUFFER_CONSOLE
+arch/arm64/configs/moonstone_defconfig:1443:warning: override: reassigning to symbol FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+arch/arm64/configs/moonstone_defconfig:1444:warning: override: reassigning to symbol DRM_FBDEV_EMULATION
+arch/arm64/configs/moonstone_defconfig:1445:warning: override: reassigning to symbol DRM_FBDEV_OVERALLOC
+arch/arm64/configs/moonstone_defconfig:1446:warning: override: reassigning to symbol INPUT_EVDEV
+arch/arm64/configs/moonstone_defconfig:1447:warning: override: reassigning to symbol INPUT_KEYBOARD
+#
+# configuration written to .config
+#
+5.4.302
+  GEN     Makefile
+  WRAP    arch/arm64/include/generated/uapi/asm/kvm_para.h
+  WRAP    arch/arm64/include/generated/uapi/asm/errno.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ioctl.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ioctls.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ipcbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/mman.h
+  WRAP    arch/arm64/include/generated/uapi/asm/msgbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/resource.h
+  WRAP    arch/arm64/include/generated/uapi/asm/poll.h
+  WRAP    arch/arm64/include/generated/uapi/asm/sembuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/shmbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/siginfo.h
+  WRAP    arch/arm64/include/generated/uapi/asm/socket.h
+  WRAP    arch/arm64/include/generated/uapi/asm/sockios.h
+  WRAP    arch/arm64/include/generated/uapi/asm/swab.h
+  WRAP    arch/arm64/include/generated/uapi/asm/stat.h
+  WRAP    arch/arm64/include/generated/uapi/asm/termbits.h
+  WRAP    arch/arm64/include/generated/uapi/asm/types.h
+  WRAP    arch/arm64/include/generated/uapi/asm/termios.h
+  HOSTCC  scripts/dtc/dtc.o
+  HOSTCC  scripts/dtc/flattree.o
+  HOSTCC  scripts/dtc/fstree.o
+  HOSTCC  scripts/dtc/data.o
+  HOSTCC  scripts/dtc/livetree.o
+  HOSTCC  scripts/dtc/checks.o
+  HOSTCC  scripts/dtc/srcpos.o
+  HOSTCC  scripts/dtc/treesource.o
+  HOSTCC  scripts/dtc/util.o
+  LEX     scripts/dtc/dtc-lexer.lex.c
+  YACC    scripts/dtc/dtc-parser.tab.[ch]
+  UPD     include/config/kernel.release
+  WRAP    arch/arm64/include/generated/asm/bugs.h
+  WRAP    arch/arm64/include/generated/asm/delay.h
+  WRAP    arch/arm64/include/generated/asm/div64.h
+  WRAP    arch/arm64/include/generated/asm/dma.h
+  WRAP    arch/arm64/include/generated/asm/dma-contiguous.h
+  WRAP    arch/arm64/include/generated/asm/hw_irq.h
+  WRAP    arch/arm64/include/generated/asm/emergency-restart.h
+  WRAP    arch/arm64/include/generated/asm/early_ioremap.h
+  WRAP    arch/arm64/include/generated/asm/dma-mapping.h
+  WRAP    arch/arm64/include/generated/asm/irq_regs.h
+  WRAP    arch/arm64/include/generated/asm/kdebug.h
+  WRAP    arch/arm64/include/generated/asm/local.h
+  WRAP    arch/arm64/include/generated/asm/local64.h
+  WRAP    arch/arm64/include/generated/asm/kmap_types.h
+  WRAP    arch/arm64/include/generated/asm/mcs_spinlock.h
+  WRAP    arch/arm64/include/generated/asm/mm-arch-hooks.h
+  WRAP    arch/arm64/include/generated/asm/mmiowb.h
+  WRAP    arch/arm64/include/generated/asm/msi.h
+  WRAP    arch/arm64/include/generated/asm/serial.h
+  WRAP    arch/arm64/include/generated/asm/qspinlock.h
+  WRAP    arch/arm64/include/generated/asm/unaligned.h
+  WRAP    arch/arm64/include/generated/asm/trace_clock.h
+  WRAP    arch/arm64/include/generated/asm/switch_to.h
+  WRAP    arch/arm64/include/generated/asm/set_memory.h
+  WRAP    arch/arm64/include/generated/asm/user.h
+  WRAP    arch/arm64/include/generated/asm/vga.h
+  WRAP    arch/arm64/include/generated/asm/qrwlock.h
+  UPD     include/generated/uapi/linux/version.h
+  UPD     include/generated/utsrelease.h
+  HOSTCC  scripts/unifdef
+  HOSTCC  scripts/dtc/dtc-lexer.lex.o
+  HOSTCC  scripts/dtc/dtc-parser.tab.o
+  HOSTLD  scripts/dtc/dtc
+  HDRINST usr/include/asm-generic/termbits.h
+  HDRINST usr/include/asm-generic/param.h
+  HDRINST usr/include/asm-generic/signal.h
+  HDRINST usr/include/asm-generic/statfs.h
+  HDRINST usr/include/asm-generic/ioctls.h
+  HDRINST usr/include/asm-generic/siginfo.h
+  HOSTCC  scripts/genksyms/genksyms.o
+  HDRINST usr/include/asm-generic/kvm_para.h
+  HDRINST usr/include/asm-generic/shmbuf.h
+  HDRINST usr/include/asm-generic/posix_types.h
+  HDRINST usr/include/asm-generic/errno-base.h
+  HOSTCC  scripts/selinux/genheaders/genheaders
+  HDRINST usr/include/asm-generic/sembuf.h
+  DTC     arch/arm64/boot/dts/vendor/xiaomi/moonstone.dtb
+  YACC    scripts/genksyms/parse.tab.[ch]
+  HOSTCC  scripts/kallsyms
+  HOSTCC  scripts/conmakehash
+  HDRINST usr/include/asm-generic/errno.h
+  HOSTCC  scripts/selinux/mdp/mdp
+  HDRINST usr/include/asm-generic/termios.h
+  LEX     scripts/genksyms/lex.lex.c
+  HDRINST usr/include/asm-generic/stat.h
+  HOSTCC  scripts/sortextable
+  HDRINST usr/include/asm-generic/auxvec.h
+  HDRINST usr/include/asm-generic/hugetlb_encode.h
+  HOSTCC  scripts/asn1_compiler
+  HDRINST usr/include/asm-generic/int-ll64.h
+  HDRINST usr/include/asm-generic/mman.h
+  HOSTCC  scripts/genksyms/parse.tab.o
+  HOSTCC  scripts/extract-cert
+  HDRINST usr/include/asm-generic/resource.h
+  HDRINST usr/include/asm-generic/poll.h
+  HDRINST usr/include/asm-generic/ioctl.h
+  HDRINST usr/include/asm-generic/fcntl.h
+  HDRINST usr/include/asm-generic/setup.h
+  HOSTCC  scripts/genksyms/lex.lex.o
+  HDRINST usr/include/asm-generic/mman-common.h
+  HDRINST usr/include/asm-generic/unistd.h
+  HDRINST usr/include/asm-generic/types.h
+  HDRINST usr/include/asm-generic/int-l64.h
+  HDRINST usr/include/asm-generic/swab.h
+  HDRINST usr/include/asm-generic/signal-defs.h
+-- KDIR: 
+-- MDIR: /home/dr4d/KernelOwO/Protium/KernelSU/kernel
+-- KernelSU Manager signature size: 0x033b
+-- KernelSU Manager signature hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+  HDRINST usr/include/asm-generic/ucontext.h
+  HDRINST usr/include/asm-generic/socket.h
+-- KernelSU/compat: backported cpus_ptr found!
+  HDRINST usr/include/asm-generic/bpf_perf_event.h
+  HDRINST usr/include/asm-generic/ipcbuf.h
+-- KernelSU/compat: f_op->read_iter found!
+-- KernelSU/compat: iterate_dir found!
+  HDRINST usr/include/asm-generic/sockios.h
+-- KernelSU/compat: selinux_inode() found
+-- KernelSU/compat: selinux_cred() found
+  HDRINST usr/include/asm-generic/msgbuf.h
+  HDRINST usr/include/drm/i810_drm.h
+  HDRINST usr/include/asm-generic/bitsperlong.h
+  HDRINST usr/include/drm/amdgpu_drm.h
+  HDRINST usr/include/drm/v3d_drm.h
+  DTC     arch/arm64/boot/dts/vendor/xiaomi/moonstone-overlay.dtbo
+  HDRINST usr/include/drm/qxl_drm.h
+  HDRINST usr/include/drm/drm_fourcc.h
+  DTC     arch/arm64/boot/dts/vendor/xiaomi/sunstone-overlay.dtbo
+  HDRINST usr/include/drm/mga_drm.h
+  HDRINST usr/include/drm/r128_drm.h
+  HDRINST usr/include/drm/exynos_drm.h
+  HDRINST usr/include/drm/vgem_drm.h
+  HDRINST usr/include/drm/nouveau_drm.h
+  HDRINST usr/include/drm/vc4_drm.h
+  HDRINST usr/include/drm/lima_drm.h
+  HDRINST usr/include/drm/virtgpu_drm.h
+  HDRINST usr/include/drm/savage_drm.h
+  HDRINST usr/include/drm/radeon_drm.h
+  DTBOIMG arch/arm64/boot/dtbo.img
+  HDRINST usr/include/drm/vmwgfx_drm.h
+  HDRINST usr/include/drm/i915_drm.h
+  HDRINST usr/include/drm/drm.h
+  HDRINST usr/include/drm/panfrost_drm.h
+  HDRINST usr/include/drm/msm_drm.h
+  DTC     arch/arm64/boot/dts/vendor/xiaomi/moonstone.dtb
+  HDRINST usr/include/drm/drm_mode.h
+  HDRINST usr/include/drm/tegra_drm.h
+  HDRINST usr/include/drm/etnaviv_drm.h
+  HDRINST usr/include/drm/armada_drm.h
+  HDRINST usr/include/drm/drm_sarea.h
+  HDRINST usr/include/drm/omap_drm.h
+  HDRINST usr/include/drm/sis_drm.h
+  HDRINST usr/include/drm/via_drm.h
+  HDRINST usr/include/linux/pps.h
+  HOSTLD  scripts/genksyms/genksyms
+  HDRINST usr/include/linux/reboot.h
+  HDRINST usr/include/linux/netlink_diag.h
+  HDRINST usr/include/linux/smiapp.h
+  HDRINST usr/include/linux/sync_file.h
+  HDRINST usr/include/linux/rtc.h
+  HDRINST usr/include/linux/bcm933xx_hcs.h
+  HDRINST usr/include/linux/param.h
+  HDRINST usr/include/linux/bfs_fs.h
+  HDRINST usr/include/linux/if_team.h
+  HDRINST usr/include/linux/netlink.h
+  HDRINST usr/include/linux/qrng.h
+  HDRINST usr/include/linux/jffs2.h
+  HDRINST usr/include/linux/kdev_t.h
+  HDRINST usr/include/linux/wimax.h
+  HDRINST usr/include/linux/kd.h
+  HDRINST usr/include/linux/if_bridge.h
+  HDRINST usr/include/linux/ion.h
+  HDRINST usr/include/linux/tee.h
+  HDRINST usr/include/linux/n_r3964.h
+  HOSTCC  scripts/mod/mk_elfconfig
+  CC      scripts/mod/empty.o
+  HDRINST usr/include/linux/ipmi_bmc.h
+  HDRINST usr/include/linux/map_to_7segment.h
+  HDRINST usr/include/linux/thermal.h
+  CC      scripts/mod/devicetable-offsets.s
+  HDRINST usr/include/linux/suspend_ioctls.h
+  HDRINST usr/include/linux/lirc.h
+  HDRINST usr/include/linux/reiserfs_xattr.h
+  HDRINST usr/include/linux/parport.h
+  HDRINST usr/include/linux/major.h
+  HDRINST usr/include/linux/sound.h
+  HDRINST usr/include/linux/signal.h
+  HDRINST usr/include/linux/if_hippi.h
+  HDRINST usr/include/linux/netfilter_ipv4.h
+  HDRINST usr/include/linux/mempolicy.h
+  HDRINST usr/include/linux/loop.h
+  HDRINST usr/include/linux/ipx.h
+  HDRINST usr/include/linux/virtio_mmio.h
+  HDRINST usr/include/linux/ppdev.h
+  HDRINST usr/include/linux/caif/if_caif.h
+  HDRINST usr/include/linux/caif/caif_socket.h
+  HDRINST usr/include/linux/netrom.h
+  HDRINST usr/include/linux/wmi.h
+  HDRINST usr/include/linux/in6.h
+  HDRINST usr/include/linux/oom.h
+  HDRINST usr/include/linux/input-event-codes.h
+  HDRINST usr/include/linux/xilinx-v4l2-controls.h
+  HDRINST usr/include/linux/max2175.h
+  HDRINST usr/include/linux/cdrom.h
+  HDRINST usr/include/linux/userio.h
+  HDRINST usr/include/linux/nfs2.h
+  HDRINST usr/include/linux/if_frad.h
+  HDRINST usr/include/linux/vsockmon.h
+  HDRINST usr/include/linux/videodev2.h
+  UPD     scripts/mod/devicetable-offsets.h
+  HDRINST usr/include/linux/if_alg.h
+  HDRINST usr/include/linux/ipmi.h
+  HDRINST usr/include/linux/scc.h
+  HDRINST usr/include/linux/ultrasound.h
+  HDRINST usr/include/linux/if_ltalk.h
+  HDRINST usr/include/linux/if_vlan.h
+  HDRINST usr/include/linux/habmmid.h
+  HDRINST usr/include/linux/fiemap.h
+  MKELF   scripts/mod/elfconfig.h
+  HDRINST usr/include/linux/msm_rmnet.h
+  HDRINST usr/include/linux/genwqe/genwqe_card.h
+  HDRINST usr/include/linux/pkt_sched.h
+  HDRINST usr/include/linux/if.h
+  HDRINST usr/include/linux/kvm_para.h
+  HOSTCC  scripts/mod/modpost.o
+  HDRINST usr/include/linux/mdio.h
+  HOSTCC  scripts/mod/sumversion.o
+  HDRINST usr/include/linux/mpls.h
+  HOSTCC  scripts/mod/file2alias.o
+  HDRINST usr/include/linux/hpet.h
+  HDRINST usr/include/linux/posix_types.h
+  HDRINST usr/include/linux/nl80211.h
+  HDRINST usr/include/linux/dvb/frontend.h
+  HDRINST usr/include/linux/dvb/dmx.h
+  HDRINST usr/include/linux/dvb/net.h
+  HDRINST usr/include/linux/dvb/ca.h
+  HDRINST usr/include/linux/dvb/audio.h
+  HDRINST usr/include/linux/dvb/version.h
+  HDRINST usr/include/linux/dvb/osd.h
+  HDRINST usr/include/linux/dvb/video.h
+  HDRINST usr/include/linux/limits.h
+  HDRINST usr/include/linux/l2tp.h
+  HDRINST usr/include/linux/string.h
+  HDRINST usr/include/linux/v4l2-common.h
+  HDRINST usr/include/linux/fb.h
+  HDRINST usr/include/linux/psp-sev.h
+  HDRINST usr/include/linux/hidraw.h
+  HDRINST usr/include/linux/if_bonding.h
+  HDRINST usr/include/linux/udp.h
+  HDRINST usr/include/linux/screen_info.h
+  HDRINST usr/include/linux/x25.h
+  HDRINST usr/include/linux/mii.h
+  HDRINST usr/include/linux/lightnvm.h
+  HDRINST usr/include/linux/acct.h
+  HDRINST usr/include/linux/ppp_defs.h
+  HDRINST usr/include/linux/cgroupstats.h
+  HDRINST usr/include/linux/mmc/ioctl.h
+  HDRINST usr/include/linux/net.h
+  HDRINST usr/include/linux/sdla.h
+  HDRINST usr/include/linux/bpf.h
+  HDRINST usr/include/linux/hiddev.h
+  HDRINST usr/include/linux/msdos_fs.h
+  HDRINST usr/include/linux/eavb_shared.h
+  HDRINST usr/include/linux/if_arp.h
+  HDRINST usr/include/linux/spi/spidev.h
+  HDRINST usr/include/linux/i8k.h
+  HDRINST usr/include/linux/inotify.h
+  HDRINST usr/include/linux/usbdevice_fs.h
+  HDRINST usr/include/linux/msm_ion_ids.h
+  HDRINST usr/include/linux/atmarp.h
+  HDRINST usr/include/linux/vboxguest.h
+  HDRINST usr/include/linux/dma-buf.h
+  HDRINST usr/include/linux/serial_reg.h
+  HDRINST usr/include/linux/icmp.h
+  HDRINST usr/include/linux/kvm.h
+  HDRINST usr/include/linux/romfs_fs.h
+  HDRINST usr/include/linux/ppp-comp.h
+  HDRINST usr/include/linux/errno.h
+  HDRINST usr/include/linux/bpf_common.h
+  HDRINST usr/include/linux/pmu.h
+  HDRINST usr/include/linux/vbox_err.h
+  HDRINST usr/include/linux/netfilter_ipv6.h
+  HDRINST usr/include/linux/pktcdvd.h
+  HDRINST usr/include/linux/securebits.h
+  HDRINST usr/include/linux/hsr_netlink.h
+  HDRINST usr/include/linux/fpga-dfl.h
+  HDRINST usr/include/linux/dm-ioctl.h
+  HDRINST usr/include/linux/auto_fs4.h
+  HDRINST usr/include/linux/if_fddi.h
+  HDRINST usr/include/linux/esoc_ctrl.h
+  HDRINST usr/include/linux/termios.h
+  HDRINST usr/include/linux/fuse.h
+  HDRINST usr/include/linux/sched.h
+  HDRINST usr/include/linux/msm_ipa.h
+  HDRINST usr/include/linux/wait.h
+  HDRINST usr/include/linux/if_eql.h
+  HDRINST usr/include/linux/dns_resolver.h
+  HDRINST usr/include/linux/capability.h
+  HDRINST usr/include/linux/media-bus-format.h
+  HDRINST usr/include/linux/virtio_ids.h
+  HDRINST usr/include/linux/phantom.h
+  HDRINST usr/include/linux/mei.h
+  HDRINST usr/include/linux/uleds.h
+  HDRINST usr/include/linux/tc_act/tc_csum.h
+  HDRINST usr/include/linux/tc_act/tc_pedit.h
+  HDRINST usr/include/linux/tc_act/tc_tunnel_key.h
+  HDRINST usr/include/linux/tc_act/tc_skbedit.h
+  HDRINST usr/include/linux/tc_act/tc_mpls.h
+  HDRINST usr/include/linux/tc_act/tc_vlan.h
+  HDRINST usr/include/linux/tc_act/tc_ctinfo.h
+  HDRINST usr/include/linux/tc_act/tc_nat.h
+  HDRINST usr/include/linux/tc_act/tc_mirred.h
+  HDRINST usr/include/linux/tc_act/tc_connmark.h
+  HDRINST usr/include/linux/tc_act/tc_defact.h
+  HDRINST usr/include/linux/tc_act/tc_ife.h
+  HDRINST usr/include/linux/tc_act/tc_sample.h
+  HDRINST usr/include/linux/tc_act/tc_gact.h
+  HDRINST usr/include/linux/tc_act/tc_ct.h
+  HDRINST usr/include/linux/tc_act/tc_ipt.h
+  HDRINST usr/include/linux/tc_act/tc_skbmod.h
+  HDRINST usr/include/linux/tc_act/tc_bpf.h
+  HDRINST usr/include/linux/arcfb.h
+  HDRINST usr/include/linux/watch_queue.h
+  HDRINST usr/include/linux/cryptouser.h
+  HDRINST usr/include/linux/udmabuf.h
+  HDRINST usr/include/linux/atmsvc.h
+  HDRINST usr/include/linux/arm_sdei.h
+  HDRINST usr/include/linux/vbox_vmmdev_types.h
+  HDRINST usr/include/linux/hysdn_if.h
+  HDRINST usr/include/linux/sched/types.h
+  HDRINST usr/include/linux/iio/types.h
+  HDRINST usr/include/linux/iio/events.h
+  HDRINST usr/include/linux/fadvise.h
+  HDRINST usr/include/linux/atmppp.h
+  HDRINST usr/include/linux/gen_stats.h
+  HDRINST usr/include/linux/spcom.h
+  CAT arch/arm64/boot/dtb.img
+  HDRINST usr/include/linux/llc.h
+  HDRINST usr/include/linux/virtio_console.h
+  HDRINST usr/include/linux/lwtunnel.h
+  HDRINST usr/include/linux/virtio_gpu.h
+  HDRINST usr/include/linux/virtio_types.h
+  HDRINST usr/include/linux/btf.h
+  HDRINST usr/include/linux/aio_abi.h
+  HDRINST usr/include/linux/rxrpc.h
+  HDRINST usr/include/linux/cciss_defs.h
+  HDRINST usr/include/linux/i2o-dev.h
+  HDRINST usr/include/linux/stat.h
+  HDRINST usr/include/linux/uvcvideo.h
+  HDRINST usr/include/linux/filter.h
+  HDRINST usr/include/linux/virtio_ring.h
+  HDRINST usr/include/linux/joystick.h
+  HDRINST usr/include/linux/matroxfb.h
+  HDRINST usr/include/linux/bt-bmc.h
+  HDRINST usr/include/linux/kcm.h
+  HDRINST usr/include/linux/auxvec.h
+  HDRINST usr/include/linux/bsg.h
+  HDRINST usr/include/linux/fscrypt.h
+  HDRINST usr/include/linux/atmbr2684.h
+  HDRINST usr/include/linux/serio.h
+  HDRINST usr/include/linux/stm.h
+  HDRINST usr/include/linux/nilfs2_ondisk.h
+  HDRINST usr/include/linux/meye.h
+  HDRINST usr/include/linux/fsmap.h
+  HDRINST usr/include/linux/if_plip.h
+  HDRINST usr/include/linux/ethtool.h
+  HDRINST usr/include/linux/v4l2-subdev.h
+  HDRINST usr/include/linux/omap3isp.h
+  HDRINST usr/include/linux/cciss_ioctl.h
+  HDRINST usr/include/linux/const.h
+  HDRINST usr/include/linux/atmclip.h
+  HDRINST usr/include/linux/dlm_plock.h
+  HDRINST usr/include/linux/nbd-netlink.h
+  HDRINST usr/include/linux/ila.h
+  HDRINST usr/include/linux/sctp.h
+  HDRINST usr/include/linux/kfd_ioctl.h
+  HDRINST usr/include/linux/tty.h
+  HDRINST usr/include/linux/netfilter.h
+  HDRINST usr/include/linux/kernel-page-flags.h
+  HDRINST usr/include/linux/minix_fs.h
+  HDRINST usr/include/linux/omapfb.h
+  HDRINST usr/include/linux/fd.h
+  HDRINST usr/include/linux/times.h
+  HDRINST usr/include/linux/cn_proc.h
+  HDRINST usr/include/linux/msm_ion.h
+  HDRINST usr/include/linux/patchkey.h
+  HDRINST usr/include/linux/seccomp.h
+  HDRINST usr/include/linux/incrementalfs.h
+  HDRINST usr/include/linux/hab_ioctl.h
+  HDRINST usr/include/linux/b1lli.h
+  HDRINST usr/include/linux/rtnetlink.h
+  HDRINST usr/include/linux/if_xdp.h
+  HDRINST usr/include/linux/msm_kgsl.h
+  HDRINST usr/include/linux/mman.h
+  HDRINST usr/include/linux/in_route.h
+  HDRINST usr/include/linux/mic_ioctl.h
+  HDRINST usr/include/linux/resource.h
+  HDRINST usr/include/linux/keyctl.h
+  HDRINST usr/include/linux/if_fc.h
+  HDRINST usr/include/linux/vmcore.h
+  HDRINST usr/include/linux/ip.h
+  HDRINST usr/include/linux/kcov.h
+  HDRINST usr/include/linux/bpqether.h
+  HDRINST usr/include/linux/atalk.h
+  HDRINST usr/include/linux/virtio_scsi.h
+  HDRINST usr/include/linux/nexthop.h
+  HDRINST usr/include/linux/v4l2-dv-timings.h
+  HDRINST usr/include/linux/msm_geni_serial.h
+  HDRINST usr/include/linux/ipa_qmi_service_v01.h
+  HDRINST usr/include/linux/nfsacl.h
+  HDRINST usr/include/linux/smc_diag.h
+  HDRINST usr/include/linux/poll.h
+  HDRINST usr/include/linux/sysinfo.h
+  HDRINST usr/include/linux/cyclades.h
+  HDRINST usr/include/linux/ax25.h
+  HDRINST usr/include/linux/virtio_fs.h
+  HDRINST usr/include/linux/uuid.h
+  HDRINST usr/include/linux/mpls_iptunnel.h
+  HDRINST usr/include/linux/firewire-constants.h
+  HDRINST usr/include/linux/netfilter_arp.h
+  HDRINST usr/include/linux/atmmpc.h
+  HDRINST usr/include/linux/ipv6_route.h
+  HDRINST usr/include/linux/nubus.h
+  HDRINST usr/include/linux/atm_he.h
+  HDRINST usr/include/linux/nbd.h
+  HDRINST usr/include/linux/nilfs2_api.h
+  HDRINST usr/include/linux/mqueue.h
+  HDRINST usr/include/linux/igmp.h
+  HDRINST usr/include/linux/hgsl.h
+  HDRINST usr/include/linux/virtio_vsock.h
+  HDRINST usr/include/linux/ioctl.h
+  HDRINST usr/include/linux/scif_ioctl.h
+  HDRINST usr/include/linux/aspeed-lpc-ctrl.h
+  HDRINST usr/include/linux/pci_regs.h
+  HDRINST usr/include/linux/affs_hardblocks.h
+  HDRINST usr/include/linux/atm_zatm.h
+  HDRINST usr/include/linux/fcntl.h
+  HDRINST usr/include/linux/nfs4_mount.h
+  HDRINST usr/include/linux/mem-buf.h
+  HDRINST usr/include/linux/icmpv6.h
+  HDRINST usr/include/linux/iommu.h
+  HDRINST usr/include/linux/dcbnl.h
+  HDRINST usr/include/linux/net_dropmon.h
+  HDRINST usr/include/linux/ptp_clock.h
+  HDRINST usr/include/linux/rose.h
+  HDRINST usr/include/linux/dlm_device.h
+  HDRINST usr/include/linux/time_types.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_TRIGGER.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_ecn.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_TTL.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_NATTYPE.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_ttl.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_CLUSTERIP.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_REJECT.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_LOG.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_ECN.h
+  HDRINST usr/include/linux/netfilter_ipv4/ip_tables.h
+  HDRINST usr/include/linux/netfilter_ipv4/ipt_ah.h
+  HDRINST usr/include/linux/gigaset_dev.h
+  HDRINST usr/include/linux/ivtvfb.h
+  HDRINST usr/include/linux/toshiba.h
+  HDRINST usr/include/linux/reiserfs_fs.h
+  HDRINST usr/include/linux/slatecom_interface.h
+  HDRINST usr/include/linux/vhost_types.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_ipv6header.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6_tables.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_HL.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_LOG.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_NPT.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_frag.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_rt.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_mh.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_REJECT.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_srh.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_hl.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_ah.h
+  HDRINST usr/include/linux/netfilter_ipv6/ip6t_opts.h
+  HDRINST usr/include/linux/ppp-ioctl.h
+  HDRINST usr/include/linux/veth.h
+  HDRINST usr/include/linux/tiocl.h
+  HDRINST usr/include/linux/dccp.h
+  HDRINST usr/include/linux/usbip.h
+  HDRINST usr/include/linux/wireguard.h
+  HDRINST usr/include/linux/openvswitch.h
+  HDRINST usr/include/linux/rmnet_data.h
+  HDRINST usr/include/linux/ife.h
+  HDRINST usr/include/linux/isdn/capicmd.h
+  HDRINST usr/include/linux/iso_fs.h
+  HDRINST usr/include/linux/tipc_sockets_diag.h
+  HDRINST usr/include/linux/taskstats.h
+  HDRINST usr/include/linux/raid/md_p.h
+  HDRINST usr/include/linux/raid/md_u.h
+  HDRINST usr/include/linux/hdlc/ioctl.h
+  HDRINST usr/include/linux/virtio_net.h
+  HDRINST usr/include/linux/adb.h
+  HDRINST usr/include/linux/if_addrlabel.h
+  HDRINST usr/include/linux/if_arcnet.h
+  HDRINST usr/include/linux/cifs/cifs_mount.h
+  HDRINST usr/include/linux/signalfd.h
+  HDRINST usr/include/linux/nsfs.h
+  HDRINST usr/include/linux/futex.h
+  HDRINST usr/include/linux/neighbour.h
+  HDRINST usr/include/linux/qbg-profile.h
+  HDRINST usr/include/linux/selinux_netlink.h
+  HDRINST usr/include/linux/qg.h
+  HDRINST usr/include/linux/hdlc.h
+  HDRINST usr/include/linux/falloc.h
+  HDRINST usr/include/linux/membarrier.h
+  HDRINST usr/include/linux/tipc_config.h
+  HDRINST usr/include/linux/cec-funcs.h
+  HDRINST usr/include/linux/ip6_tunnel.h
+  HDRINST usr/include/linux/ipc.h
+  HDRINST usr/include/linux/agpgart.h
+  HDRINST usr/include/linux/fs.h
+  HDRINST usr/include/linux/qcota.h
+  HDRINST usr/include/linux/if_tunnel.h
+  HDRINST usr/include/linux/input.h
+  HDRINST usr/include/linux/qg-profile.h
+  HDRINST usr/include/linux/stddef.h
+  HDRINST usr/include/linux/time.h
+  HDRINST usr/include/linux/gsmmux.h
+  HDRINST usr/include/linux/rseq.h
+  HDRINST usr/include/linux/types.h
+  HDRINST usr/include/linux/xdp_diag.h
+  HDRINST usr/include/linux/wireless.h
+  HDRINST usr/include/linux/unistd.h
+  HDRINST usr/include/linux/virtio_rng.h
+  HDRINST usr/include/linux/target_core_user.h
+  HDRINST usr/include/linux/virtio_pmem.h
+  HDRINST usr/include/linux/tty_flags.h
+  HDRINST usr/include/linux/cramfs_fs.h
+  HDRINST usr/include/linux/pr.h
+  HDRINST usr/include/linux/pcitest.h
+  HOSTLD  scripts/mod/modpost
+  HDRINST usr/include/linux/swab.h
+  HDRINST usr/include/linux/cec.h
+  HDRINST usr/include/linux/timerfd.h
+  HDRINST usr/include/linux/devlink.h
+  HDRINST usr/include/linux/eventpoll.h
+  HDRINST usr/include/linux/atm_eni.h
+  HDRINST usr/include/linux/if_phonet.h
+  HDRINST usr/include/linux/batadv_packet.h
+  HDRINST usr/include/linux/tipc_netlink.h
+  HDRINST usr/include/linux/virtio_config.h
+  HDRINST usr/include/linux/qnx4_fs.h
+  HDRINST usr/include/linux/kcmp.h
+  HDRINST usr/include/linux/chio.h
+  HDRINST usr/include/linux/sem.h
+  HDRINST usr/include/linux/qseecom.h
+  HDRINST usr/include/linux/wil6210_uapi.h
+  HDRINST usr/include/linux/netfilter/xt_set.h
+  HDRINST usr/include/linux/atm.h
+  HDRINST usr/include/linux/netfilter/xt_physdev.h
+  HDRINST usr/include/linux/if_link.h
+  HDRINST usr/include/linux/netfilter/nf_conntrack_sctp.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_cttimeout.h
+  HDRINST usr/include/linux/netfilter/xt_ipvs.h
+  HDRINST usr/include/linux/netfilter/xt_mac.h
+  CC      kernel/bounds.s
+  CALL    ../scripts/atomic/check-atomics.sh
+  HDRINST usr/include/linux/netfilter/x_tables.h
+  HDRINST usr/include/linux/netfilter/xt_LED.h
+  HDRINST usr/include/linux/netfilter/nf_tables.h
+  HDRINST usr/include/linux/netfilter/xt_state.h
+  UPD     include/generated/timeconst.h
+  HDRINST usr/include/linux/netfilter/xt_statistic.h
+  HDRINST usr/include/linux/netfilter/xt_length.h
+  HDRINST usr/include/linux/netfilter/xt_AUDIT.h
+  HDRINST usr/include/linux/netfilter/nf_tables_compat.h
+  HDRINST usr/include/linux/netfilter/xt_hashlimit.h
+  HDRINST usr/include/linux/netfilter/xt_connlimit.h
+  HDRINST usr/include/linux/netfilter/xt_cluster.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_queue.h
+  HDRINST usr/include/linux/netfilter/xt_TCPOPTSTRIP.h
+  HDRINST usr/include/linux/netfilter/xt_ipcomp.h
+  HDRINST usr/include/linux/netfilter/xt_nfacct.h
+  HDRINST usr/include/linux/netfilter/xt_cpu.h
+  HDRINST usr/include/linux/netfilter/xt_HMARK.h
+  HDRINST usr/include/linux/netfilter/xt_addrtype.h
+  HDRINST usr/include/linux/netfilter/nf_nat.h
+  HDRINST usr/include/linux/netfilter/xt_CT.h
+  HDRINST usr/include/linux/netfilter/xt_bpf.h
+  HDRINST usr/include/linux/netfilter/xt_realm.h
+  HDRINST usr/include/linux/netfilter/nf_conntrack_tuple_common.h
+  HDRINST usr/include/linux/netfilter/xt_CLASSIFY.h
+  HDRINST usr/include/linux/netfilter/xt_quota.h
+  HDRINST usr/include/linux/netfilter/xt_rateest.h
+  HDRINST usr/include/linux/netfilter/xt_TCPMSS.h
+  HDRINST usr/include/linux/netfilter/xt_time.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_osf.h
+  HDRINST usr/include/linux/netfilter/nf_conntrack_ftp.h
+  HDRINST usr/include/linux/netfilter/nf_conntrack_tcp.h
+  HDRINST usr/include/linux/netfilter/xt_NFQUEUE.h
+  HDRINST usr/include/linux/netfilter/xt_limit.h
+  HDRINST usr/include/linux/netfilter/xt_IDLETIMER.h
+  HDRINST usr/include/linux/netfilter/xt_l2tp.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_compat.h
+  HDRINST usr/include/linux/netfilter/xt_iprange.h
+  HDRINST usr/include/linux/netfilter/nf_conntrack_common.h
+  HDRINST usr/include/linux/netfilter/nf_synproxy.h
+  HDRINST usr/include/linux/netfilter/nf_log.h
+  HDRINST usr/include/linux/netfilter/xt_owner.h
+  HDRINST usr/include/linux/netfilter/xt_string.h
+  HDRINST usr/include/linux/netfilter/xt_dscp.h
+  HDRINST usr/include/linux/netfilter/xt_tcpmss.h
+  HDRINST usr/include/linux/netfilter/xt_connbytes.h
+  HDRINST usr/include/linux/netfilter/xt_connlabel.h
+  HDRINST usr/include/linux/netfilter/xt_devgroup.h
+  HDRINST usr/include/linux/netfilter/xt_DSCP.h
+  HDRINST usr/include/linux/netfilter/xt_mark.h
+  HDRINST usr/include/linux/netfilter/xt_comment.h
+  HDRINST usr/include/linux/netfilter/xt_TPROXY.h
+  HDRINST usr/include/linux/netfilter/xt_connmark.h
+  HDRINST usr/include/linux/netfilter/xt_tcpudp.h
+  HDRINST usr/include/linux/netfilter/xt_CONNMARK.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_cthelper.h
+  HDRINST usr/include/linux/netfilter/xt_LOG.h
+  HDRINST usr/include/linux/netfilter/xt_policy.h
+  HDRINST usr/include/linux/netfilter/xt_cgroup.h
+  HDRINST usr/include/linux/netfilter/xt_sctp.h
+  HDRINST usr/include/linux/netfilter/xt_CHECKSUM.h
+  HDRINST usr/include/linux/netfilter/xt_esp.h
+  HDRINST usr/include/linux/netfilter/nfnetlink.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_conntrack.h
+  HDRINST usr/include/linux/netfilter/xt_NFLOG.h
+  HDRINST usr/include/linux/netfilter/xt_RATEEST.h
+  HDRINST usr/include/linux/netfilter/xt_helper.h
+  HDRINST usr/include/linux/netfilter/xt_ecn.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_log.h
+  HDRINST usr/include/linux/netfilter/xt_osf.h
+  HDRINST usr/include/linux/netfilter/ipset/ip_set_list.h
+  HDRINST usr/include/linux/netfilter/ipset/ip_set_bitmap.h
+  HDRINST usr/include/linux/netfilter/ipset/ip_set.h
+  HDRINST usr/include/linux/netfilter/ipset/ip_set_hash.h
+  UPD     include/generated/bounds.h
+  HDRINST usr/include/linux/netfilter/xt_pkttype.h
+  HDRINST usr/include/linux/netfilter/xt_CONNSECMARK.h
+  HDRINST usr/include/linux/netfilter/xt_SECMARK.h
+  HDRINST usr/include/linux/netfilter/xt_multiport.h
+  HDRINST usr/include/linux/netfilter/xt_u32.h
+  HDRINST usr/include/linux/netfilter/xt_socket.h
+  CC      arch/arm64/kernel/asm-offsets.s
+  HDRINST usr/include/linux/netfilter/xt_conntrack.h
+  HDRINST usr/include/linux/netfilter/xt_recent.h
+  HDRINST usr/include/linux/netfilter/xt_SYNPROXY.h
+  HDRINST usr/include/linux/netfilter/xt_rpfilter.h
+  HDRINST usr/include/linux/netfilter/nfnetlink_acct.h
+  HDRINST usr/include/linux/netfilter/xt_TEE.h
+  HDRINST usr/include/linux/netfilter/xt_MARK.h
+  HDRINST usr/include/linux/netfilter/xt_dccp.h
+  HDRINST usr/include/linux/utsname.h
+  HDRINST usr/include/linux/in.h
+  HDRINST usr/include/linux/libc-compat.h
+  HDRINST usr/include/linux/qemu_fw_cfg.h
+  HDRINST usr/include/linux/mtio.h
+  HDRINST usr/include/linux/psample.h
+  HDRINST usr/include/linux/dlmconstants.h
+  HDRINST usr/include/linux/usb/usb_ctrl_qti.h
+  HDRINST usr/include/linux/usb/charger.h
+  HDRINST usr/include/linux/usb/f_accessory.h
+  HDRINST usr/include/linux/usb/audio.h
+  HDRINST usr/include/linux/usb/g_uvc.h
+  HDRINST usr/include/linux/usb/ch9.h
+  HDRINST usr/include/linux/usb/raw_gadget.h
+  HDRINST usr/include/linux/usb/ch11.h
+  HDRINST usr/include/linux/usb/functionfs.h
+  HDRINST usr/include/linux/usb/cdc-wdm.h
+  HDRINST usr/include/linux/usb/cdc.h
+  HDRINST usr/include/linux/usb/tmc.h
+  HDRINST usr/include/linux/usb/video.h
+  HDRINST usr/include/linux/usb/gadgetfs.h
+  HDRINST usr/include/linux/usb/midi.h
+  HDRINST usr/include/linux/usb/g_printer.h
+  HDRINST usr/include/linux/elf-fdpic.h
+  HDRINST usr/include/linux/ndctl.h
+  HDRINST usr/include/linux/mroute.h
+  HDRINST usr/include/linux/gfs2_ondisk.h
+  HDRINST usr/include/linux/if_macsec.h
+  HDRINST usr/include/linux/synclink.h
+  HDRINST usr/include/linux/gameport.h
+  HDRINST usr/include/linux/genetlink.h
+  HDRINST usr/include/linux/memfd.h
+  HDRINST usr/include/linux/pkt_cls.h
+  HDRINST usr/include/linux/serial.h
+  HDRINST usr/include/linux/dlm.h
+  HDRINST usr/include/linux/if_x25.h
+  HDRINST usr/include/linux/socket.h
+  HDRINST usr/include/linux/sonet.h
+  HDRINST usr/include/linux/atm_nicstar.h
+  HDRINST usr/include/linux/wimax/i2400m.h
+  HDRINST usr/include/linux/elf-em.h
+  HDRINST usr/include/linux/virtio_input.h
+  HDRINST usr/include/linux/switchtec_ioctl.h
+  HDRINST usr/include/linux/if_infiniband.h
+  HDRINST usr/include/linux/blkpg.h
+  HDRINST usr/include/linux/rds.h
+  HDRINST usr/include/linux/nfs_idmap.h
+  HDRINST usr/include/linux/random.h
+  HDRINST usr/include/linux/keyboard.h
+  HDRINST usr/include/linux/fsi.h
+  HDRINST usr/include/linux/byteorder/big_endian.h
+  HDRINST usr/include/linux/hash_info.h
+  HDRINST usr/include/linux/fdreg.h
+  HDRINST usr/include/linux/byteorder/little_endian.h
+  HDRINST usr/include/linux/zorro_ids.h
+  HDRINST usr/include/linux/rpmsg.h
+  HDRINST usr/include/linux/efs_fs_sb.h
+  HDRINST usr/include/linux/zorro.h
+  HDRINST usr/include/linux/if_ether.h
+  HDRINST usr/include/linux/hw_breakpoint.h
+  HDRINST usr/include/linux/tc_ematch/tc_em_ipt.h
+  HDRINST usr/include/linux/tc_ematch/tc_em_meta.h
+  HDRINST usr/include/linux/tc_ematch/tc_em_cmp.h
+  HDRINST usr/include/linux/tc_ematch/tc_em_nbyte.h
+  HDRINST usr/include/linux/kernel.h
+  HDRINST usr/include/linux/tc_ematch/tc_em_text.h
+  HDRINST usr/include/linux/ip_vs.h
+  HDRINST usr/include/linux/mmtimer.h
+  HDRINST usr/include/linux/smc.h
+  HDRINST usr/include/linux/quota.h
+  HDRINST usr/include/linux/seg6.h
+  HDRINST usr/include/linux/serial_core.h
+  HDRINST usr/include/linux/msg.h
+  HDRINST usr/include/linux/fib_rules.h
+  HDRINST usr/include/linux/fou.h
+  HDRINST usr/include/linux/coff.h
+  HDRINST usr/include/linux/lp.h
+  HDRINST usr/include/linux/watchdog.h
+  HDRINST usr/include/linux/qnxtypes.h
+  HDRINST usr/include/linux/rio_mport_cdev.h
+  HDRINST usr/include/linux/smcinvoke.h
+  HDRINST usr/include/linux/rmnet_ipa_fd_ioctl.h
+  HDRINST usr/include/linux/un.h
+  HDRINST usr/include/linux/vhost.h
+  HDRINST usr/include/linux/xattr.h
+  HDRINST usr/include/linux/inet_diag.h
+  HDRINST usr/include/linux/module.h
+  HDRINST usr/include/linux/nvram.h
+  HDRINST usr/include/linux/bpfilter.h
+  HDRINST usr/include/linux/kexec.h
+  HDRINST usr/include/linux/vtpm_proxy.h
+  HDRINST usr/include/linux/binfmts.h
+  HDRINST usr/include/linux/hsi/hsi_char.h
+  HDRINST usr/include/linux/hsi/cs-protocol.h
+  HDRINST usr/include/linux/tcp_metrics.h
+  HDRINST usr/include/linux/gtp.h
+  HDRINST usr/include/linux/sysstats.h
+  HDRINST usr/include/linux/coresight-stm.h
+  HDRINST usr/include/linux/netdevice.h
+  HDRINST usr/include/linux/nfs3.h
+  HDRINST usr/include/linux/aspeed-p2a-ctrl.h
+  HDRINST usr/include/linux/can/bcm.h
+  HDRINST usr/include/linux/can/netlink.h
+  HDRINST usr/include/linux/net_namespace.h
+  HDRINST usr/include/linux/can/error.h
+  HDRINST usr/include/linux/can/j1939.h
+  HDRINST usr/include/linux/can/vxcan.h
+  HDRINST usr/include/linux/can/gw.h
+  HDRINST usr/include/linux/can/raw.h
+  HDRINST usr/include/linux/shm.h
+  HDRINST usr/include/linux/virtio_blk.h
+  HDRINST usr/include/linux/hyperv.h
+  HDRINST usr/include/linux/fanotify.h
+  HDRINST usr/include/linux/capi.h
+  HDRINST usr/include/linux/uinput.h
+  HDRINST usr/include/linux/bpf_perf_event.h
+  HDRINST usr/include/linux/snmp.h
+  HDRINST usr/include/linux/virtio_9p.h
+  HDRINST usr/include/linux/erspan.h
+  HDRINST usr/include/linux/i2c.h
+  HDRINST usr/include/linux/userfaultfd.h
+  HDRINST usr/include/linux/gpio.h
+  HDRINST usr/include/linux/if_slip.h
+  HDRINST usr/include/linux/hdlcdrv.h
+  HDRINST usr/include/linux/atm_tcp.h
+  HDRINST usr/include/linux/isst_if.h
+  HDRINST usr/include/linux/coda.h
+  HDRINST usr/include/linux/atmapi.h
+  HDRINST usr/include/linux/nfsd/cld.h
+  HDRINST usr/include/linux/nfsd/nfsfh.h
+  HDRINST usr/include/linux/nfsd/stats.h
+  HDRINST usr/include/linux/nfsd/export.h
+  HDRINST usr/include/linux/nfsd/debug.h
+  HDRINST usr/include/linux/ptrace.h
+  HDRINST usr/include/linux/virtio_pci.h
+  HDRINST usr/include/linux/cm4000_cs.h
+  HDRINST usr/include/linux/vfio_ccw.h
+  HDRINST usr/include/linux/hid.h
+  HDRINST usr/include/linux/sonypi.h
+  HDRINST usr/include/linux/atmlec.h
+  HDRINST usr/include/linux/psci.h
+  HDRINST usr/include/linux/fips_status.h
+  HDRINST usr/include/linux/irqnr.h
+  HDRINST usr/include/linux/net_tstamp.h
+  HDRINST usr/include/linux/packet_diag.h
+  HDRINST usr/include/linux/media.h
+  HDRINST usr/include/linux/atm_idt77105.h
+  HDRINST usr/include/linux/qcedev.h
+  HDRINST usr/include/linux/vfio.h
+  HDRINST usr/include/linux/seg6_hmac.h
+  HDRINST usr/include/linux/posix_acl_xattr.h
+  HDRINST usr/include/linux/vt.h
+  HDRINST usr/include/linux/fsl_hypervisor.h
+  HDRINST usr/include/linux/msm_npu.h
+  HDRINST usr/include/linux/unix_diag.h
+  HDRINST usr/include/linux/ncsi.h
+  HDRINST usr/include/linux/if_pppox.h
+  HDRINST usr/include/linux/nfs_mount.h
+  HDRINST usr/include/linux/udf_fs_i.h
+  HDRINST usr/include/linux/magic.h
+  HDRINST usr/include/linux/sockios.h
+  HDRINST usr/include/linux/v4l2-mediabus.h
+  HDRINST usr/include/linux/dm-log-userspace.h
+  HDRINST usr/include/linux/close_range.h
+  HDRINST usr/include/linux/netfilter_arp/arp_tables.h
+  HDRINST usr/include/linux/netfilter_arp/arpt_mangle.h
+  HDRINST usr/include/linux/btrfs.h
+  HDRINST usr/include/linux/mount.h
+  HDRINST usr/include/linux/errqueue.h
+  HDRINST usr/include/linux/nfs_fs.h
+  HDRINST usr/include/linux/if_ppp.h
+  HDRINST usr/include/linux/blktrace_api.h
+  HDRINST usr/include/linux/netfilter_bridge.h
+  HDRINST usr/include/linux/nfs.h
+  HDRINST usr/include/linux/if_cablemodem.h
+  HDRINST usr/include/linux/uio.h
+  HDRINST usr/include/linux/audit.h
+  HDRINST usr/include/linux/dqblk_xfs.h
+  HDRINST usr/include/linux/uhid.h
+  HDRINST usr/include/linux/ipmi_msgdefs.h
+  HDRINST usr/include/linux/utime.h
+  HDRINST usr/include/linux/posix_acl.h
+  HDRINST usr/include/linux/if_packet.h
+  HDRINST usr/include/linux/firewire-cdev.h
+  HDRINST usr/include/linux/ipv6.h
+  HDRINST usr/include/linux/soundcard.h
+  HDRINST usr/include/linux/android/binderfs.h
+  HDRINST usr/include/linux/elfcore.h
+  HDRINST usr/include/linux/sock_diag.h
+  HDRINST usr/include/linux/android/binder.h
+  HDRINST usr/include/linux/sed-opal.h
+  HDRINST usr/include/linux/prctl.h
+  HDRINST usr/include/linux/cuda.h
+  HDRINST usr/include/linux/io_uring.h
+  HDRINST usr/include/linux/cycx_cfm.h
+  HDRINST usr/include/linux/xfrm.h
+  HDRINST usr/include/linux/virtio_balloon.h
+  HDRINST usr/include/linux/baycom.h
+  HDRINST usr/include/linux/dlm_netlink.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_arpreply.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_pkttype.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_ip6.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_802_3.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_arp.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_mark_m.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_among.h
+  HDRINST usr/include/linux/netfilter_bridge/ebtables.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_nflog.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_mark_t.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_nat.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_log.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_limit.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_redirect.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_vlan.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_stp.h
+  HDRINST usr/include/linux/netfilter_bridge/ebt_ip.h
+  HDRINST usr/include/linux/sysctl.h
+  HDRINST usr/include/linux/nvme_ioctl.h
+  HDRINST usr/include/linux/rio_cm_cdev.h
+  HDRINST usr/include/linux/auto_fs.h
+  HDRINST usr/include/linux/tcp.h
+  HDRINST usr/include/linux/tipc.h
+  HDRINST usr/include/linux/if_tun.h
+  HDRINST usr/include/linux/mic_common.h
+  HDRINST usr/include/linux/mroute6.h
+  HDRINST usr/include/linux/virtio_iommu.h
+  HDRINST usr/include/linux/msm_dsps.h
+  HDRINST usr/include/linux/pci.h
+  HDRINST usr/include/linux/seg6_local.h
+  HDRINST usr/include/linux/atmdev.h
+  HDRINST usr/include/linux/vm_sockets.h
+  HDRINST usr/include/linux/rfkill.h
+  HDRINST usr/include/linux/if_pppol2tp.h
+  HDRINST usr/include/linux/ipsec.h
+  HDRINST usr/include/linux/batman_adv.h
+  HDRINST usr/include/linux/hdreg.h
+  HDRINST usr/include/linux/pfkeyv2.h
+  HDRINST usr/include/linux/phonet.h
+  HDRINST usr/include/linux/nfs4.h
+  HDRINST usr/include/linux/atmsap.h
+  HDRINST usr/include/linux/ivtv.h
+  HDRINST usr/include/linux/atmioc.h
+  HDRINST usr/include/linux/qbt_handler.h
+  HDRINST usr/include/linux/kernelcapi.h
+  HDRINST usr/include/linux/auto_dev-ioctl.h
+  HDRINST usr/include/linux/pg.h
+  HDRINST usr/include/linux/radeonfb.h
+  HDRINST usr/include/linux/bcache.h
+  HDRINST usr/include/linux/seg6_iptunnel.h
+  HDRINST usr/include/linux/am437x-vpfe.h
+  HDRINST usr/include/linux/netconf.h
+  HDRINST usr/include/linux/adfs_fs.h
+  HDRINST usr/include/linux/route.h
+  HDRINST usr/include/linux/vm_sockets_diag.h
+  HDRINST usr/include/linux/nfc.h
+  HDRINST usr/include/linux/mhi.h
+  HDRINST usr/include/linux/i2c-dev.h
+  HDRINST usr/include/linux/if_addr.h
+  HDRINST usr/include/linux/elf.h
+  HDRINST usr/include/linux/connector.h
+  HDRINST usr/include/linux/nfc/nfcinfo.h
+  HDRINST usr/include/linux/timex.h
+  HDRINST usr/include/linux/btrfs_tree.h
+  HDRINST usr/include/linux/spss_utils.h
+  HDRINST usr/include/linux/can.h
+  HDRINST usr/include/linux/v4l2-controls.h
+  HDRINST usr/include/linux/tls.h
+  HDRINST usr/include/linux/seg6_genl.h
+  HDRINST usr/include/linux/raw.h
+  HDRINST usr/include/linux/qrtr.h
+  HDRINST usr/include/linux/sunrpc/debug.h
+  HDRINST usr/include/linux/fsverity.h
+  HDRINST usr/include/linux/apm_bios.h
+  HDRINST usr/include/linux/blkzoned.h
+  HDRINST usr/include/linux/personality.h
+  HDRINST usr/include/linux/edd.h
+  HDRINST usr/include/linux/qbg.h
+  HDRINST usr/include/linux/virtio_crypto.h
+  HDRINST usr/include/linux/perf_event.h
+  HDRINST usr/include/media/msm_cvp_private.h
+  HDRINST usr/include/media/radio-iris-commands.h
+  HDRINST usr/include/media/radio-iris.h
+  HDRINST usr/include/media/synx.h
+  HDRINST usr/include/misc/xilinx_sdfec.h
+  HDRINST usr/include/misc/cxl.h
+  HDRINST usr/include/misc/wigig_sensing_uapi.h
+  HDRINST usr/include/misc/fastrpc.h
+  HDRINST usr/include/misc/habanalabs.h
+  HDRINST usr/include/misc/ocxl.h
+  HDRINST usr/include/mtd/mtd-abi.h
+  HDRINST usr/include/mtd/ubi-user.h
+  HDRINST usr/include/mtd/nftl-user.h
+  HDRINST usr/include/mtd/inftl-user.h
+  HDRINST usr/include/rdma/mlx5_user_ioctl_cmds.h
+  HDRINST usr/include/mtd/mtd-user.h
+  HDRINST usr/include/rdma/rdma_user_ioctl_cmds.h
+  HDRINST usr/include/rdma/rdma_user_rxe.h
+  HDRINST usr/include/rdma/cxgb4-abi.h
+  HDRINST usr/include/rdma/mlx5_user_ioctl_verbs.h
+  HDRINST usr/include/rdma/vmw_pvrdma-abi.h
+  HDRINST usr/include/rdma/mlx4-abi.h
+  HDRINST usr/include/rdma/rdma_netlink.h
+  HDRINST usr/include/rdma/ib_user_sa.h
+  HDRINST usr/include/rdma/ib_user_ioctl_verbs.h
+  HDRINST usr/include/rdma/qedr-abi.h
+  HDRINST usr/include/rdma/bnxt_re-abi.h
+  HDRINST usr/include/rdma/ib_user_mad.h
+  HDRINST usr/include/rdma/rdma_user_ioctl.h
+  HDRINST usr/include/rdma/siw-abi.h
+  HDRINST usr/include/rdma/ocrdma-abi.h
+  HDRINST usr/include/rdma/cxgb3-abi.h
+  HDRINST usr/include/rdma/rdma_user_cm.h
+  HDRINST usr/include/rdma/mlx5-abi.h
+  HDRINST usr/include/rdma/efa-abi.h
+  HDRINST usr/include/rdma/i40iw-abi.h
+  HDRINST usr/include/rdma/ib_user_ioctl_cmds.h
+  HDRINST usr/include/rdma/ib_user_verbs.h
+  HDRINST usr/include/rdma/hfi/hfi1_ioctl.h
+  HDRINST usr/include/rdma/hfi/hfi1_user.h
+  HDRINST usr/include/rdma/rvt-abi.h
+  HDRINST usr/include/rdma/hns-abi.h
+  HDRINST usr/include/rdma/mthca-abi.h
+  HDRINST usr/include/scsi/scsi_netlink_fc.h
+  HDRINST usr/include/scsi/scsi_netlink.h
+  HDRINST usr/include/scsi/scsi_bsg_ufs.h
+  HDRINST usr/include/scsi/scsi_bsg_fc.h
+  HDRINST usr/include/scsi/cxlflash_ioctl.h
+  HDRINST usr/include/scsi/fc/fc_ns.h
+  HDRINST usr/include/scsi/fc/fc_els.h
+  HDRINST usr/include/scsi/fc/fc_fs.h
+  HDRINST usr/include/scsi/fc/fc_gs.h
+  HDRINST usr/include/sound/hdsp.h
+  HDRINST usr/include/sound/compress_params.h
+  HDRINST usr/include/sound/compress_offload.h
+  HDRINST usr/include/sound/sfnt_info.h
+  HDRINST usr/include/sound/asound.h
+  HDRINST usr/include/sound/sb16_csp.h
+  HDRINST usr/include/sound/tlv.h
+  HDRINST usr/include/sound/sof/header.h
+  HDRINST usr/include/sound/sof/tokens.h
+  HDRINST usr/include/sound/sof/fw.h
+  HDRINST usr/include/sound/sof/abi.h
+  HDRINST usr/include/sound/firewire.h
+  HDRINST usr/include/sound/emu10k1.h
+  HDRINST usr/include/sound/asound_fm.h
+  HDRINST usr/include/sound/asoc.h
+  HDRINST usr/include/sound/skl-tplg-interface.h
+  HDRINST usr/include/sound/asequencer.h
+  HDRINST usr/include/sound/usb_stream.h
+  HDRINST usr/include/sound/hdspm.h
+  HDRINST usr/include/video/edid.h
+  HDRINST usr/include/sound/snd_sst_tokens.h
+  HDRINST usr/include/video/sisfb.h
+  HDRINST usr/include/video/uvesafb.h
+  HDRINST usr/include/xen/gntdev.h
+  HDRINST usr/include/xen/evtchn.h
+  HDRINST usr/include/xen/gntalloc.h
+  HDRINST usr/include/xen/privcmd.h
+  HDRINST usr/include/linux/version.h
+  HDRINST usr/include/asm/param.h
+  HDRINST usr/include/asm/posix_types.h
+  HDRINST usr/include/asm/signal.h
+  HDRINST usr/include/asm/statfs.h
+  HDRINST usr/include/asm/auxvec.h
+  HDRINST usr/include/asm/sve_context.h
+  HDRINST usr/include/asm/kvm.h
+  HDRINST usr/include/asm/sigcontext.h
+  HDRINST usr/include/asm/fcntl.h
+  HDRINST usr/include/asm/setup.h
+  HDRINST usr/include/asm/hwcap.h
+  HDRINST usr/include/asm/unistd.h
+  HDRINST usr/include/asm/byteorder.h
+  HDRINST usr/include/asm/perf_regs.h
+  HDRINST usr/include/asm/ucontext.h
+  HDRINST usr/include/asm/bpf_perf_event.h
+  HDRINST usr/include/asm/ptrace.h
+  HDRINST usr/include/asm/bitsperlong.h
+  HDRINST usr/include/asm/termbits.h
+  HDRINST usr/include/asm/ioctls.h
+  HDRINST usr/include/asm/shmbuf.h
+  HDRINST usr/include/asm/siginfo.h
+  HDRINST usr/include/asm/kvm_para.h
+  HDRINST usr/include/asm/sembuf.h
+  HDRINST usr/include/asm/errno.h
+  HDRINST usr/include/asm/termios.h
+  HDRINST usr/include/asm/stat.h
+  HDRINST usr/include/asm/resource.h
+  HDRINST usr/include/asm/mman.h
+  UPD     include/generated/asm-offsets.h
+  HDRINST usr/include/asm/poll.h
+  CALL    ../scripts/checksyscalls.sh
+  HDRINST usr/include/asm/types.h
+  HDRINST usr/include/asm/ioctl.h
+  HDRINST usr/include/asm/swab.h
+  HDRINST usr/include/asm/socket.h
+  HDRINST usr/include/asm/msgbuf.h
+  HDRINST usr/include/asm/sockios.h
+  HDRINST usr/include/asm/ipcbuf.h
+  HDRINST usr/include/audio/linux/msm_audio_amrnb.h
+  HDRINST usr/include/audio/linux/msm_audio_g711.h
+  HDRINST usr/include/audio/linux/msm_audio_calibration.h
+  HDRINST usr/include/audio/linux/avtimer.h
+  HDRINST usr/include/audio/linux/msm_audio_amrwb.h
+  HDRINST usr/include/audio/linux/msm_audio_alac.h
+  HDRINST usr/include/audio/linux/mfd/wcd9xxx/wcd9320_registers.h
+  HDRINST usr/include/audio/linux/mfd/wcd9xxx/wcd9xxx_registers.h
+  HDRINST usr/include/audio/linux/msm_audio.h
+  HDRINST usr/include/audio/linux/msm_audio_g711_dec.h
+  HDRINST usr/include/audio/linux/msm_audio_amrwbplus.h
+  HDRINST usr/include/audio/linux/msm_audio_wma.h
+  HDRINST usr/include/audio/linux/msm_audio_ape.h
+  HDRINST usr/include/audio/linux/msm_audio_ar.h
+  HDRINST usr/include/audio/linux/msm_audio_aac.h
+  LDS     arch/arm64/kernel/vdso/vdso.lds
+  CC      arch/arm64/kernel/vdso/vgettimeofday.o
+  HDRINST usr/include/audio/linux/msm_audio_wmapro.h
+  AS      arch/arm64/kernel/vdso/note.o
+  HDRINST usr/include/audio/linux/msm_audio_mvs.h
+  HDRINST usr/include/audio/linux/msm_audio_voicememo.h
+  HDRINST usr/include/audio/linux/msm_audio_ac3.h
+  AS      arch/arm64/kernel/vdso/sigreturn.o
+  HDRINST usr/include/audio/linux/msm_audio_qcp.h
+  HDRINST usr/include/audio/linux/wcd-spi-ac-params.h
+  HDRINST usr/include/audio/linux/msm_audio_sbc.h
+  HDRINST usr/include/audio/sound/wcd-dsp-glink.h
+  HDRINST usr/include/audio/sound/audio_slimslave.h
+  HDRINST usr/include/audio/sound/lsm_params.h
+  HDRINST usr/include/audio/sound/msmcal-hwdep.h
+  HDRINST usr/include/audio/sound/voice_params.h
+  HDRINST usr/include/audio/sound/devdep_params.h
+  HDRINST usr/include/audio/sound/audio_effects.h
+  HDRINST usr/include/audio/sound/audio_compressed_formats.h
+  HDRINST usr/include/vidc/media/msm_media_info.h
+  HDRINST usr/include/vidc/media/msm_vidc_utils.h
+  HDRINST usr/include/camera/media/cam_ope.h
+  HDRINST usr/include/camera/media/cam_defs.h
+  HDRINST usr/include/camera/media/cam_isp_tfe.h
+  HDRINST usr/include/camera/media/cam_fd.h
+  HDRINST usr/include/camera/media/cam_lrme.h
+  HDRINST usr/include/camera/media/cam_custom.h
+  HDRINST usr/include/camera/media/cam_isp_ife.h
+  HDRINST usr/include/camera/media/cam_sync.h
+  HDRINST usr/include/camera/media/cam_icp.h
+  HDRINST usr/include/camera/media/cam_sensor.h
+  HDRINST usr/include/camera/media/cam_isp_sfe.h
+  HDRINST usr/include/camera/media/cam_req_mgr.h
+  HDRINST usr/include/camera/media/cam_jpeg.h
+  HDRINST usr/include/camera/media/cam_isp.h
+  HDRINST usr/include/camera/media/cam_cpas.h
+  HDRINST usr/include/camera/media/cam_isp_vfe.h
+  HDRINST usr/include/camera/media/cam_tfe.h
+  LD      arch/arm64/kernel/vdso/vdso.so.dbg
+  HDRINST usr/include/display/hdcp/msm_hdmi_hdcp_mgr.h
+  HDRINST usr/include/display/media/mmm_color_fmt.h
+  HDRINST usr/include/display/drm/sde_drm.h
+  HDRINST usr/include/display/drm/msm_drm_pp.h
+  HDRINST usr/include/display/media/msm_sde_rotator.h
+  VDSOSYM include/generated/vdso-offsets.h
+  LDS     arch/arm64/kernel/vdso32/vdso.lds
+  CC32    arch/arm64/kernel/vdso32/note.o
+  CC32    arch/arm64/kernel/vdso32/vgettimeofday.o
+  AS32    arch/arm64/kernel/vdso32/sigreturn.o
+  HOSTCC  arch/arm64/kernel/vdso32/../../../arm/vdso/vdsomunge
+  LD32    arch/arm64/kernel/vdso32/vdso.so.raw
+  MUNGE   arch/arm64/kernel/vdso32/vdso.so.dbg
+  VDSOSYM include/generated/vdso32-offsets.h
+  CC      init/main.o
+  CHK     include/generated/compile.h
+  CC      init/do_mounts.o
+  CC      init/do_mounts_rd.o
+  CC      init/do_mounts_initrd.o
+  CC      init/initramfs.o
+  CC      init/calibrate.o
+  CC      init/init_task.o
+  HOSTCC  usr/gen_init_cpio
+  CC      arch/arm64/crypto/sha1-ce-glue.o
+  UPD     include/generated/compile.h
+  CC      arch/arm64/mm/dma-mapping.o
+  CC      arch/arm64/net/bpf_jit_comp.o
+  CC      arch/arm64/kernel/probes/uprobes.o
+  CC      arch/arm64/kvm/hyp/../../../../virt/kvm/arm/hyp/vgic-v3-sr.o
+  CC      arch/arm64/mm/extable.o
+  CC      certs/system_keyring.o
+  ../usr/gen_initramfs_list.sh: Cannot open '/home/dr4d/KernelOwO/Protium/alpine_rootfs'
+make[2]: *** [../usr/Makefile:60: usr/initramfs_data.cpio.gz] Error 1
+make[1]: *** [/home/dr4d/KernelOwO/Protium/Makefile:1892: usr] Error 2
+make[1]: *** Waiting for unfinished jobs....
+  CC      kernel/cgroup/cgroup.o
+  CC      kernel/bpf/core.o
+  CC      arch/arm64/kvm/hyp/../../../../virt/kvm/arm/hyp/timer-sr.o
+  CC      kernel/cgroup/rstat.o
+  EXTRACT_CERTS   
+  CC      certs/common.o
+  CC      arch/arm64/kernel/probes/decode-insn.o
+  AS      arch/arm64/crypto/sha1-ce-core.o
+  CC      arch/arm64/mm/fault.o
+  CC      arch/arm64/mm/init.o
+  CC      arch/arm64/kvm/hyp/../../../../virt/kvm/arm/hyp/aarch32.o
+  CC      arch/arm64/crypto/sha2-ce-glue.o
+  CC      kernel/cgroup/namespace.o
+  AS      certs/system_certificates.o
+  CC      arch/arm64/kernel/probes/simulate-insn.o
+  CC      kernel/cgroup/cgroup-v1.o
+  AR      arch/arm64/net/built-in.a
+  CC      arch/arm64/kvm/hyp/vgic-v2-cpuif-proxy.o
+  CC      kernel/cgroup/freezer.o
+  AR      certs/built-in.a
+  CC      arch/arm64/kvm/../../../virt/kvm/kvm_main.o
+  CC      kernel/cgroup/legacy_freezer.o
+  CC      arch/arm64/kvm/../../../virt/kvm/coalesced_mmio.o
+  AS      arch/arm64/mm/cache.o
+  CC      kernel/bpf/syscall.o
+  AR      arch/arm64/kernel/probes/built-in.a
+  CC      init/version.o
+  OBJCOPY arch/arm64/kernel/vdso/vdso.so
+  AS      arch/arm64/kernel/vdso/vdso.o
+  AS      arch/arm64/crypto/sha2-ce-core.o
+  CC      kernel/cgroup/pids.o
+  CC      kernel/cgroup/cpuset.o
+  AR      arch/arm64/kernel/vdso/built-in.a
+  AS      arch/arm64/crypto/aes-ce-core.o
+  CC      arch/arm64/crypto/aes-ce-glue.o
+  CC      kernel/dma/mapping.o
+  CC      arch/arm64/kvm/hyp/sysreg-sr.o
+  CC      kernel/bpf/verifier.o
+  CC      arch/arm64/crypto/aes-glue-ce.o
+  CC      arch/arm64/mm/copypage.o
+  CC      kernel/dma/direct.o
+  AR      init/built-in.a
+  AS      arch/arm64/crypto/aes-ce.o
+  CC      kernel/bpf/inode.o
+  CC      kernel/events/core.o
+  CC      kernel/bpf/helpers.o
+  OBJCOPY arch/arm64/kernel/vdso32/vdso.so
+  AS      arch/arm64/kernel/vdso32/vdso.o
+  CC      arch/arm64/mm/flush.o
+  CC      kernel/dma/dummy.o
+  AR      arch/arm64/kernel/vdso32/built-in.a
+  CC      arch/arm64/kernel/debug-monitors.o
+  CC      arch/arm64/crypto/sha256-glue.o
+  CC      arch/arm64/kvm/hyp/debug-sr.o
+  CC      kernel/bpf/tnum.o
+  CC      kernel/bpf/bpf_iter.o
+  AS      arch/arm64/kernel/entry.o
+  CC      kernel/events/ring_buffer.o
+  CC      kernel/events/callchain.o
+  AR      kernel/cgroup/built-in.a
+  CC      arch/arm64/kvm/../../../virt/kvm/eventfd.o
+  AS      arch/arm64/kvm/hyp/entry.o
+  CC      arch/arm64/kvm/hyp/switch.o
+  CC      kernel/dma/contiguous.o
+  CC      arch/arm64/kernel/irq.o
+  CC      arch/arm64/mm/ioremap.o
+  SHIPPED arch/arm64/crypto/sha256-core.S
+  CC      kernel/events/hw_breakpoint.o
+  CC      kernel/irq/irqdesc.o
+  AS      arch/arm64/crypto/chacha-neon-core.o
+  CC      kernel/irq/handle.o
+  CC      kernel/bpf/map_iter.o
+  AR      kernel/livepatch/built-in.a
+  CC      kernel/bpf/task_iter.o
+  CC      arch/arm64/mm/mmap.o
+  CC      arch/arm64/crypto/chacha-neon-glue.o
+  CC      kernel/dma/coherent.o
+  SHIPPED arch/arm64/crypto/poly1305-core.S
+  CC      arch/arm64/mm/pgd.o
+  CC      arch/arm64/kernel/fpsimd.o
+  CC      kernel/dma/swiotlb.o
+  CC      kernel/bpf/prog_iter.o
+  AS      arch/arm64/kvm/hyp/fpsimd.o
+  CC      kernel/irq/manage.o
+  CC      kernel/locking/mutex.o
+  CC      kernel/locking/semaphore.o
+  CC      arch/arm64/kvm/hyp/tlb.o
+  CC      kernel/power/qos.o
+  CC      kernel/printk/printk.o
+  CC      arch/arm64/mm/mmu.o
+  CC      kernel/bpf/hashtab.o
+  CC      kernel/bpf/arraymap.o
+  CC      kernel/dma/remap.o
+  CC      kernel/rcu/update.o
+  CC      arch/arm64/crypto/poly1305-glue.o
+  CC      kernel/events/uprobes.o
+  AS      arch/arm64/kernel/entry-fpsimd.o
+  CC      arch/arm64/kernel/process.o
+  AS      arch/arm64/kvm/hyp/hyp-entry.o
+  CC      kernel/locking/rwsem.o
+  AS      arch/arm64/crypto/aes-cipher-core.o
+  CC      kernel/irq/spurious.o
+  AR      arch/arm64/kvm/hyp/built-in.a
+  CC      arch/arm64/kernel/ptrace.o
+  CC      arch/arm64/kvm/../../../virt/kvm/vfio.o
+  CC      kernel/irq/resend.o
+  CC      arch/arm64/mm/context.o
+  AR      kernel/dma/built-in.a
+  CC      kernel/irq/chip.o
+  CC      kernel/power/main.o
+  CC      kernel/printk/printk_safe.o
+  CC      kernel/irq/dummychip.o
+  CC      kernel/locking/percpu-rwsem.o
+  AS      arch/arm64/mm/proc.o
+  CC      kernel/bpf/percpu_freelist.o
+  CC      arch/arm64/crypto/aes-cipher-glue.o
+  CC      kernel/sched/walt/walt.o
+  CC      kernel/power/console.o
+  CC      kernel/time/time.o
+  CC      arch/arm64/mm/pageattr.o
+  AR      kernel/printk/built-in.a
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/arm.o
+  CC      kernel/rcu/sync.o
+  CC      kernel/power/process.o
+  CC      kernel/bpf/bpf_lru_list.o
+  CC      kernel/locking/spinlock.o
+  CC      arch/arm64/kernel/setup.o
+  AR      kernel/events/built-in.a
+  CC      kernel/trace/trace_clock.o
+  AS      arch/arm64/crypto/sha256-core.o
+  CC      kernel/bpf/lpm_trie.o
+  CC      kernel/rcu/srcutree.o
+  CC      kernel/locking/osq_lock.o
+  CC      kernel/irq/devres.o
+  AS      arch/arm64/crypto/poly1305-core.o
+  CC      kernel/power/suspend.o
+  AR      arch/arm64/mm/built-in.a
+  CC      kernel/sched/walt/boost.o
+  AR      arch/arm64/crypto/built-in.a
+  CC      kernel/time/timer.o
+  CC      kernel/trace/ring_buffer.o
+  CC      kernel/sched/core.o
+  CC      kernel/locking/qspinlock.o
+  CC      kernel/sched/walt/sched_avg.o
+  CC      kernel/time/hrtimer.o
+  CC      kernel/power/wakelock.o
+  CC      kernel/fork.o
+  CC      kernel/irq/autoprobe.o
+  CC      kernel/locking/rtmutex.o
+  CC      kernel/rcu/tree.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/mmu.o
+  CC      arch/arm64/kernel/signal.o
+  CC      kernel/bpf/map_in_map.o
+  CC      kernel/locking/qrwlock.o
+  CC      kernel/sched/loadavg.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/mmio.o
+  CC      kernel/bpf/local_storage.o
+  CC      kernel/power/poweroff.o
+  CC      kernel/irq/irqdomain.o
+  AR      kernel/locking/built-in.a
+  CC      arch/arm64/kernel/sys.o
+  CC      kernel/power/wakeup_reason.o
+  CC      arch/arm64/kernel/stacktrace.o
+  CC      kernel/trace/trace.o
+  CC      kernel/time/timekeeping.o
+  CC      arch/arm64/kernel/time.o
+  CC      kernel/sched/clock.o
+  CC      kernel/sched/cputime.o
+  CC      kernel/sched/walt/qc_vas.o
+  CC      kernel/power/energy_model.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/psci.o
+  CC      kernel/bpf/queue_stack_maps.o
+  CC      kernel/irq/proc.o
+  CC      kernel/sched/idle.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/perf.o
+  CC      arch/arm64/kernel/traps.o
+  CC      kernel/irq/cpuhotplug.o
+  CC      arch/arm64/kvm/inject_fault.o
+  CC      kernel/rcu/rcu_segcblist.o
+  CC      kernel/time/ntp.o
+  CC      kernel/bpf/ringbuf.o
+  AR      kernel/power/built-in.a
+  AR      kernel/rcu/built-in.a
+  CC      kernel/time/clocksource.o
+  CC      kernel/sched/walt/core_ctl.o
+  CC      kernel/time/jiffies.o
+  CC      kernel/trace/trace_output.o
+  CC      kernel/bpf/disasm.o
+  CC      kernel/irq/pm.o
+  CC      kernel/exec_domain.o
+  CC      kernel/sched/walt/trace.o
+  CC      arch/arm64/kernel/io.o
+  CC      kernel/time/timer_list.o
+  CC      arch/arm64/kvm/regmap.o
+  CC      kernel/trace/trace_seq.o
+  CC      arch/arm64/kvm/va_layout.o
+  CC      kernel/time/timeconv.o
+  CC      arch/arm64/kernel/vdso.o
+  AS      arch/arm64/kernel/hyp-stub.o
+  CC      arch/arm64/kernel/psci.o
+  CC      kernel/bpf/trampoline.o
+  CC      kernel/bpf/btf.o
+  CC      kernel/bpf/dispatcher.o
+  AS      arch/arm64/kvm/hyp.o
+  AS      arch/arm64/kvm/hyp-init.o
+  CC      arch/arm64/kvm/handle_exit.o
+  CC      arch/arm64/kernel/cpu_ops.o
+  CC      kernel/time/timecounter.o
+  CC      arch/arm64/kernel/insn.o
+  CC      kernel/trace/trace_stat.o
+  CC      kernel/panic.o
+  CC      kernel/irq/msi.o
+  CC      kernel/time/alarmtimer.o
+  CC      kernel/bpf/devmap.o
+  CC      kernel/time/posix-timers.o
+  CC      kernel/time/posix-cpu-timers.o
+  CC      kernel/sched/fair.o
+  CC      kernel/trace/trace_printk.o
+  CC      kernel/trace/trace_sched_switch.o
+  CC      kernel/sched/walt/cpu-boost.o
+  CC      kernel/irq/affinity.o
+  CC      arch/arm64/kernel/return_address.o
+  CC      kernel/cpu.o
+  CC      arch/arm64/kernel/cpuinfo.o
+  CC      arch/arm64/kvm/guest.o
+  CC      arch/arm64/kernel/cpu_errata.o
+  CC      kernel/sched/rt.o
+  CC      kernel/bpf/cpumap.o
+  CC      arch/arm64/kernel/cpufeature.o
+  CC      kernel/sched/deadline.o
+  CC      kernel/time/posix-clock.o
+  AR      kernel/irq/built-in.a
+  CC      arch/arm64/kvm/debug.o
+  CC      kernel/exit.o
+  CC      kernel/trace/trace_nop.o
+  CC      arch/arm64/kernel/alternative.o
+  CC      kernel/bpf/bpf_local_storage.o
+  CC      kernel/softirq.o
+  CC      arch/arm64/kvm/reset.o
+  CC      kernel/resource.o
+  AR      kernel/sched/walt/built-in.a
+  CC      kernel/sysctl.o
+  CC      kernel/time/itimer.o
+  CC      arch/arm64/kvm/sys_regs.o
+  CC      arch/arm64/kvm/sys_regs_generic_v8.o
+  CC      kernel/sysctl_binary.o
+  CC      kernel/trace/blktrace.o
+  CC      arch/arm64/kernel/cacheinfo.o
+  CC      arch/arm64/kernel/smp.o
+  CC      kernel/time/clockevents.o
+  CC      kernel/sched/wait.o
+  CC      kernel/trace/trace_events.o
+  CC      kernel/time/tick-common.o
+  CC      kernel/bpf/offload.o
+  CC      kernel/sched/wait_bit.o
+  CC      arch/arm64/kernel/smp_spin_table.o
+  CC      kernel/trace/trace_export.o
+../arch/arm64/kvm/sys_regs.c:2864:23: warning: variable 'clidr' is uninitialized when passed as a const pointer argument here [-Wuninitialized-const-pointer]
+ 2864 |         get_clidr_el1(NULL, &clidr); /* Ugly... */
+      |                              ^~~~~
+  CC      kernel/trace/trace_event_perf.o
+  CC      kernel/time/tick-broadcast.o
+  CC      kernel/trace/trace_events_filter.o
+  CC      kernel/sched/swait.o
+1 warning generated.
+  CC      kernel/sched/completion.o
+  CC      arch/arm64/kvm/vgic-sys-reg-v3.o
+  CC      kernel/bpf/net_namespace.o
+  CC      kernel/capability.o
+  CC      arch/arm64/kernel/topology.o
+  CC      arch/arm64/kvm/fpsimd.o
+  CC      arch/arm64/kvm/pmu.o
+  CC      kernel/sched/cpupri.o
+  CC      kernel/time/tick-broadcast-hrtimer.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/aarch32.o
+  CC      kernel/sched/cpudeadline.o
+arch/arm64/kernel/topology.o: no symbols
+  CC      kernel/ptrace.o
+  AS      arch/arm64/kernel/smccc-call.o
+  CC      kernel/bpf/stackmap.o
+  CC      arch/arm64/kernel/syscall.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic.o
+  CC      kernel/time/sched_clock.o
+  CC      kernel/trace/trace_events_trigger.o
+  CC      kernel/time/tick-oneshot.o
+  CC      kernel/time/tick-sched.o
+  CC      kernel/bpf/cgroup.o
+  CC      kernel/user.o
+  CC      kernel/bpf/reuseport_array.o
+  CC      arch/arm64/kernel/sys32.o
+  CC      kernel/trace/bpf_trace.o
+  CC      kernel/time/vsyscall.o
+  CC      kernel/trace/power-traces.o
+  CC      arch/arm64/kernel/signal32.o
+  CC      kernel/trace/rpm-traces.o
+  CC      kernel/bpf/bpf_struct_ops.o
+  CC      kernel/trace/trace_dynevent.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-init.o
+  CC      kernel/sched/topology.o
+  CC      kernel/sched/stop_task.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-irqfd.o
+  CC      kernel/sched/pelt.o
+  CC      kernel/trace/trace_probe.o
+  CC      kernel/sched/stats.o
+  CC      kernel/sched/debug.o
+  AR      kernel/time/built-in.a
+  CC      arch/arm64/kernel/sys_compat.o
+  CC      kernel/trace/trace_uprobe.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-v2.o
+  CC      kernel/sched/cpuacct.o
+  CC      kernel/sched/cpufreq.o
+  CC      kernel/sched/cpufreq_schedutil.o
+  CC      kernel/sched/membarrier.o
+  CC      kernel/signal.o
+  AR      kernel/bpf/built-in.a
+  CC      kernel/sched/isolation.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-v3.o
+  AS      arch/arm64/kernel/kuser32.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-v4.o
+  CC      kernel/sys.o
+  CC      arch/arm64/kernel/module.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-mmio.o
+  CC      kernel/umh.o
+  CC      kernel/trace/ipc_logging.o
+  CC      kernel/workqueue.o
+  CC      arch/arm64/kernel/module-plts.o
+  CC      arch/arm64/kernel/perf_regs.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-mmio-v2.o
+  CC      kernel/pid.o
+  CC      kernel/sched/psi.o
+  CC      arch/arm64/kernel/perf_callchain.o
+  CC      arch/arm64/kernel/perf_event.o
+  CC      kernel/task_work.o
+  CC      kernel/extable.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-mmio-v3.o
+  CC      arch/arm64/kernel/perf_trace_counters.o
+  AR      kernel/trace/built-in.a
+  CC      kernel/params.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-kvm-device.o
+  CC      arch/arm64/kernel/perf_trace_user.o
+  CC      arch/arm64/kernel/hw_breakpoint.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-its.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/vgic/vgic-debug.o
+  CC      kernel/kthread.o
+  AS      arch/arm64/kernel/sleep.o
+  CC      kernel/sys_ni.o
+  CC      kernel/nsproxy.o
+  CC      arch/arm64/kvm/../../../virt/kvm/irqchip.o
+  CC      kernel/notifier.o
+  CC      arch/arm64/kernel/suspend.o
+  CC      kernel/ksysfs.o
+  AR      kernel/sched/built-in.a
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/arch_timer.o
+  CC      arch/arm64/kvm/../../../virt/kvm/arm/pmu.o
+  CC      arch/arm64/kernel/cpuidle.o
+  CC      kernel/cred.o
+  CC      arch/arm64/kernel/jump_label.o
+  CC      arch/arm64/kernel/efi.o
+  AS      arch/arm64/kernel/efi-entry.o
+  CC      kernel/reboot.o
+  CC      kernel/async.o
+  CC      kernel/range.o
+  CC      kernel/smpboot.o
+  AS      arch/arm64/kernel/efi-rt-wrapper.o
+  CC      kernel/ucount.o
+  CC      arch/arm64/kernel/armv8_deprecated.o
+  CC      arch/arm64/kernel/kaslr.o
+  CC      kernel/kmod.o
+  CC      kernel/groups.o
+  CC      kernel/freezer.o
+  CC      kernel/profile.o
+  CC      arch/arm64/kernel/ssbd.o
+  CC      kernel/stacktrace.o
+  CC      kernel/futex.o
+  CC      kernel/smp.o
+  CC      arch/arm64/kernel/pointer_auth.o
+  AR      arch/arm64/kvm/built-in.a
+  CC      arch/arm64/kernel/scs.o
+  AS      arch/arm64/kernel/head.o
+  LDS     arch/arm64/kernel/vmlinux.lds
+  OBJCOPY arch/arm64/kernel/efi-entry.stub.o
+  CC      kernel/uid16.o
+  CC      kernel/module.o
+  CC      kernel/kallsyms.o
+  CC      kernel/compat.o
+  CC      kernel/utsname.o
+  CC      kernel/user_namespace.o
+  CC      kernel/pid_namespace.o
+  AR      arch/arm64/kernel/built-in.a
+  UPD     kernel/config_data
+  CC      kernel/stop_machine.o
+  AR      arch/arm64/built-in.a
+  CC      kernel/audit.o
+  CC      kernel/auditfilter.o
+  CC      kernel/auditsc.o
+  CC      kernel/audit_watch.o
+  CC      kernel/audit_fsnotify.o
+  CC      kernel/audit_tree.o
+  CC      kernel/watchdog.o
+  CC      kernel/seccomp.o
+  CC      kernel/utsname_sysctl.o
+  CC      kernel/taskstats.o
+  CC      kernel/tsacct.o
+  CC      kernel/tracepoint.o
+  CC      kernel/irq_work.o
+  CC      kernel/cpu_pm.o
+  CC      kernel/scs.o
+  CC      kernel/jump_label.o
+  CC      kernel/iomem.o
+  GZIP    kernel/config_data.gz
+  CC      kernel/configs.o
+  AR      kernel/built-in.a
+make: *** [Makefile:190: sub-make] Error 2

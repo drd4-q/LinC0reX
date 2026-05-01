@@ -1,0 +1,92 @@
+name: CI Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      Build_Kernel:
+        required: true
+        type: choice
+        default: VB & NonVB
+        options:
+        - VB
+        - NonVB
+        - VB & NonVB
+      os:
+        required: true
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  build-vb:
+    if: ${{ (inputs.Build_Kernel == 'VB' || inputs.Build_Kernel == 'VB & NonVB') && !failure() && !cancelled() }}
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      include_vb: "VB"
+      os: ${{ inputs.os }}
+    secrets:
+      kernel_git: ${{ secrets.Kernel_Git }}
+
+  build-nonvb:
+    if: ${{ inputs.Build_Kernel == 'NonVB' || inputs.Build_Kernel == 'VB & NonVB' }}
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      include_vb: "NonVB"
+      os: ${{ inputs.os }}
+    secrets:
+      kernel_git: ${{ secrets.Kernel_Git }}
+
+  release:
+    needs: [build-vb, build-nonvb]
+    if: |
+      !failure() &&
+      !cancelled()
+    runs-on: ${{ inputs.os }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get Tag
+        id: tag
+        run: |
+          latest_tag=$(curl -s https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+          if [[ -z "$latest_tag" ]]; then latest_tag='v0'; fi
+          echo "Latest Tag: $latest_tag"
+          echo "tag=v$((${latest_tag:1} + 1))" >> $GITHUB_ENV
+
+      - name: Download artifacts
+        id: artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: false
+          path: out/download/.
+
+      - name: Prepare Release
+        id: prepare
+        run: |
+          cd $GITHUB_WORKSPACE
+          mkdir -p out/artifacts
+          if [[ $(ls out/download | grep "\-VB") ]]; then
+            cp out/download/*-VB/bodyFile.md out/bodyFile.md
+            echo "name=$(cat out/download/*-VB/name.txt)" >> $GITHUB_ENV
+          else
+            cp out/download/*-NonVB/bodyFile.md out/bodyFile.md
+            echo "name=$(cat out/download/*-NonVB/name.txt)" >> $GITHUB_ENV
+          fi
+          cp out/download/*VB/*.zip out/artifacts/
+
+      - name: Release
+        id: release
+        uses: ncipollo/release-action@v1
+        with:
+          name: "${{ env.name }}-${{ env.tag }}"
+          tag: "${{ env.tag }}"
+          allowUpdates: false
+          bodyFile: "${{ github.workspace }}/out/bodyFile.md"
+          artifacts: "${{ github.workspace }}/out/artifacts/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup
+        id: cleanup
+        run: rm -r $GITHUB_WORKSPACE/out/*
