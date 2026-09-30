@@ -101,11 +101,59 @@ subsystem from `/sys/class/drm/card0/uevent`.
 With this, `udev-probe` reports `DEVNAME=/dev/dri/card0` and `drmprobe` gets a
 usable node back from `drmGetDevices2`.
 
-It still does not make weston work, though. This device has no control node,
-so libdrm returns an empty string in `node[1]` rather than NULL; opening it
-gives ENOENT and weston concludes there is no device. The panel and the kernel
-are fine. `kmsclaim` sidesteps the whole path by opening `/dev/dri/card0`
-directly.
+It still does not make weston work on its own, because the way weston was
+being invoked was wrong. See below — that part turned out to be an argument
+error, not a driver or libdrm problem.
+
+## weston, and the argument that wasted the evening
+
+`weston` failed to start for a long time with:
+
+```
+Trying direct launcher...
+ERROR: could not open DRM device '/dev/dri/card0'
+no drm device found
+```
+
+That message reads like a device discovery failure, and the empty string that
+libdrm returns in `node[1]` for the missing control node looks like the
+culprit. It is not. The actual path, in `libweston/backend-drm/drm.c`:
+
+```c
+static struct udev_device *
+open_specific_drm_device(struct drm_backend *b, const char *name)
+{
+	device = udev_device_new_from_subsystem_sysname(b->udev, "drm", name);
+	if (!device) {
+		weston_log("ERROR: could not open DRM device '%s'\n", name);
+		return NULL;
+	}
+```
+
+`name` is `config->specific_device`, assigned straight from the command line
+in `compositor/main.c` with no path stripping anywhere in between. So passing
+`--drm-device=/dev/dri/card0` makes libudev search for a sysfs entry whose
+sysname is the string `/dev/dri/card0`, which does not exist.
+
+The help text says it plainly, and it was read past twice:
+
+```
+--drm-device=CARD   The DRM device to use, e.g. "card0".
+```
+
+The correct invocation is the sysname, not the path:
+
+```
+weston --backend=drm-backend.so --drm-device=card0 --renderer=noop
+```
+
+`udev_device_get_devnode()` then needs the `/run/udev/data` entry built above,
+so the database is still needed — but for the devnode lookup, not because
+enumeration is broken.
+
+Note also that `--backend` takes a module filename, not a backend name:
+`drm-backend.so`, not `drm`. That one really is a weston quirk, and it does
+produce a misleading "unknown backend" error.
 
 ## The actual test
 
@@ -146,13 +194,20 @@ or SurfaceFlinger comes up against a display nothing owns.
 
 ## What is still missing
 
-A compositor. Software rendering is available in principle but weston cannot
-be made to run on this driver without patching its device discovery, and the
-obvious fix — an `LD_PRELOAD` shim over `drmGetDevices2` that patches up the
-node list, or passing the fd in from a launcher — is untried. A minimal
-compositor built directly on libdrm, the way `kmsclaim` is, is the fallback
-and has the advantage of already being proven to work.
+A working compositor configuration, and input. `weston` should start once
+invoked as above, but that is untested on device because the phone was
+disconnected before the argument was found. The next things to establish, in
+order:
 
-GPU support is a separate problem. KGSL exposes no DRM node, so neither Mesa
-nor freedreno can see the Adreno 619, which is why the test image is a CPU
-dumb buffer.
+- Confirm weston starts and takes the panel.
+- Input. Nothing is passed through to the chroot but `/dev` and `/sys` right
+  now, and a bind-mounted `/dev` does include `/dev/input`, so touch should
+  already be visible. Worth checking, because without it phosh is unusable
+  however well the display works.
+- GPU. KGSL exposes no DRM node, so neither Mesa nor freedreno can see the
+  Adreno 619. Software rendering means llvmpipe, which is slow but adequate
+  to prove the stack. The test image in `kmsclaim` is a CPU dumb buffer for the
+  same reason.
+
+The EVDI driver is no longer needed for any of this and could be dropped, but
+it is harmless and already wired in, so it is not worth the churn right now.
