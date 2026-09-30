@@ -155,6 +155,48 @@ Note also that `--backend` takes a module filename, not a backend name:
 `drm-backend.so`, not `drm`. That one really is a weston quirk, and it does
 produce a misleading "unknown backend" error.
 
+## weston: how far it gets
+
+With `--drm-device=card0` the device is found and weston proceeds:
+
+```
+using /dev/dri/card0
+DRM: supports atomic modesetting
+DRM: supports GBM modifiers
+Loading module '.../libweston-10/gl-renderer.so'
+... GL ES 3.2 - renderer features
+```
+
+Mesa initialises on llvmpipe — software rendering, as intended for a first
+pass. Getting there needed `libgl1-mesa-dri` (which is what the package is
+called; `mesa-dri-drivers` is a virtual name), plus its transitive
+`libLLVM-15`, `libsensors5`, `libedit2` and friends. Mesa looks in
+`/usr/lib/dri`, not only in the multiarch path, so the drivers have to be in
+both.
+
+Then weston 10 aborts:
+
+```
+weston: ../libweston/drm-formats.c:131: weston_drm_format_array_add_format:
+Assertion `!weston_drm_format_array_find_format(formats, format)' failed.
+```
+
+This is an upstream weston bug, not a driver or kernel problem.
+`drm_plane_populate_formats()` in `libweston/backend-drm/kms.c` walks a
+plane's `IN_FORMATS` blob and adds each entry with no duplicate check, and SDE
+advertises the same fourcc twice. `weston_drm_format_array_join()` a few lines
+below does check, so the invariant is real, just not enforced consistently.
+
+`tools/fmtshim.so` intercepts both `weston_drm_format_array_add_format` and
+`weston_drm_format_add_modifier` and returns the existing entry instead of
+asserting. Both are needed: with only the first, the second assertion fires
+immediately. The duplicate carries a different modifier, so returning the
+existing entry is not the same as dropping data.
+
+Whether weston then runs to completion is **not yet established**. The
+interception is confirmed to work — weston gets past `drm-formats.c:131` — but
+the run was cut short before the end.
+
 ## The actual test
 
 ```
