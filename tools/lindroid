@@ -1,0 +1,247 @@
+#!/system/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# lindroid - start the Linux chroot on this phone and hand it the display.
+#
+# Everything here is runtime state that a reboot destroys: the bind mounts, the
+# udev database, and the two services that have to be stopped before Linux can
+# take the panel. Re-running this script rebuilds all of it, so it is safe to
+# run after any reboot.
+#
+#   lindroid              interactive shell in the chroot
+#   lindroid shell        same
+#   lindroid status       who holds the display right now
+#   lindroid test         give the panel to Linux, show colour bars
+#   lindroid weston       give the panel to Linux, run weston
+#   lindroid back         give the panel back to Android
+#   lindroid run <cmd>    run one command in the chroot
+#
+# Root is required; the script re-executes itself under su if it has to.
+#
+# Keep in sync with tools/panel.sh in the lindroid-kernel repo, which does the
+# same handover from the adb side.
+
+ROOTFS=/data/lindroid/droot
+BINDIR=/data/lindroid/bin
+CARD0=/dev/dri/card0
+
+# The two services that hold the panel. SurfaceFlinger is the obvious one, but
+# the Qualcomm composer HAL opens card0 itself and is what actually has to go:
+# with only SurfaceFlinger stopped, composer-servic keeps six descriptors on
+# the card and nothing else can take DRM master.
+SF=surfaceflinger
+COMPOSER=vendor.qti.hardware.display.composer
+
+say()  { echo "== $*"; }
+warn() { echo "!! $*" >&2; }
+
+# --- privilege -------------------------------------------------------------
+
+if [ "$(id -u)" != 0 ]; then
+	args=""
+	for a in "$@"; do
+		args="$args '$a'"
+	done
+	exec su -c "sh $0$args"
+fi
+
+# --- runtime state ---------------------------------------------------------
+
+setup_mounts() {
+	mkdir -p "$MOUNTPOINT" "$ROOTFS" 2>/dev/null
+
+	# Idempotent: only mount what is not already there.
+	grep -q " $ROOTFS/proc " /proc/self/mounts 2>/dev/null ||
+		mount -t proc proc "$ROOTFS/proc" 2>/dev/null
+	grep -q " $ROOTFS/dev " /proc/self/mounts 2>/dev/null ||
+		mount -o bind /dev "$ROOTFS/dev" 2>/dev/null
+	grep -q " $ROOTFS/sys " /proc/self/mounts 2>/dev/null ||
+		mount -o bind /sys "$ROOTFS/sys" 2>/dev/null
+
+	# libdrm resolves device names through libudev, which reads a database
+	# under /run/udev/data. Android has no udev, so without this both
+	# modetest and weston report "no drm device found" even though card0 is
+	# there and openable. Build it from sysfs so it cannot drift.
+	local d
+	for d in /sys/class/drm/card*; do
+		[ -e "$d/uevent" ] || continue
+		local name major minor syspath
+		name=$(sed -n 's/^DEVNAME=dri\///p' "$d/uevent" 2>/dev/null)
+		major=$(sed -n 's/^MAJOR=//p' "$d/uevent" 2>/dev/null)
+		minor=$(sed -n 's/^MINOR=//p' "$d/uevent" 2>/dev/null)
+		syspath=$(readlink -f "$d" 2>/dev/null)
+		[ -n "$name" ] && [ -n "$major" ] || continue
+
+		mkdir -p "$ROOTFS/run/udev/data"
+		cat > "$ROOTFS/run/udev/data/n$major:$minor" <<-EOF
+		E:DEVPATH=${syspath#/sys}
+		E:DEVNAME=/dev/dri/$name
+		E:DEVTYPE=drm_minor
+		E:MAJOR=$major
+		E:MINOR=$minor
+		E:SUBSYSTEM=drm
+		E:USEC_INITIALIZED=1000000000
+		E:ID_PATH=platform-lindroid
+		G:seat
+		EOF
+	done
+}
+
+# Which processes have card0 open right now.
+#
+# Done with a single ls rather than a readlink per descriptor: Android runs
+# enough processes and descriptors that the shell loop takes minutes, which
+# reads as the device hanging.
+holders() {
+	ls -l /proc/*/fd/* 2>/dev/null |
+	grep 'dri/card0' |
+	sed -n 's|.*\(/proc/[0-9]*\)/fd/[0-9]*.*|\1|p' |
+	sort -u |
+	while read -r d; do
+		p=${d#/proc/}
+		[ -r "/proc/$p/comm" ] && cat "/proc/$p/comm" 2>/dev/null
+	done | sort -u
+}
+
+# Stop the display owners and wait for the card to actually be free.
+release_panel() {
+	say "stopping the display owners"
+	setprop ctl.stop "$SF" 2>/dev/null
+	setprop ctl.stop "$COMPOSER" 2>/dev/null
+
+	local i=0
+	while [ $i -lt 20 ]; do
+		[ -z "$(holders)" ] && break
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ -n "$(holders)" ]; then
+		warn "something still holds $CARD0 after ${i}s:"
+		holders | sed 's/^/  /'
+		return 1
+	fi
+	say "$CARD0 is free"
+	return 0
+}
+
+# Composer first, SurfaceFlinger second. The other order leaves SurfaceFlinger
+# starting against a display nothing owns.
+restore_panel() {
+	say "stopping Linux from the display"
+	pkill -f kmsclaim 2>/dev/null
+	pkill -f weston 2>/dev/null
+	sleep 1
+
+	say "restarting the display owners"
+	setprop ctl.start "$COMPOSER" 2>/dev/null
+	sleep 1
+	setprop ctl.start "$SF" 2>/dev/null
+	sleep 2
+	status
+}
+
+status() {
+	say "services"
+	echo "  surfaceflinger ................ $(getprop init.svc.$SF)"
+	echo "  display composer .............. $(getprop init.svc.$COMPOSER)"
+
+	say "panel"
+	if [ -e /sys/class/drm/card0-DSI-1/enabled ]; then
+		echo "  card0-DSI-1/status ........... $(cat /sys/class/drm/card0-DSI-1/status 2>/dev/null)"
+		echo "  card0-DSI-1/enabled .......... $(cat /sys/class/drm/card0-DSI-1/enabled 2>/dev/null)"
+	else
+		echo "  (no DSI connector on card0)"
+	fi
+
+	say "processes holding $CARD0"
+	local h
+	h=$(holders)
+	[ -z "$h" ] && echo "  (none)" || echo "$h" | sed 's/^/  /'
+}
+
+need_chroot() {
+	if [ ! -x "$ROOTFS/usr/bin/weston" ]; then
+		warn "no chroot at $ROOTFS"
+		warn "build it on a PC with tools/fetchdeb.py, push the tarball"
+		warn "to /data/lindroid/ and unpack it there"
+		exit 1
+	fi
+}
+
+# --- commands --------------------------------------------------------------
+
+cmd_status() {
+	setup_mounts
+	status
+}
+
+cmd_shell() {
+	setup_mounts
+	need_chroot
+	say "chroot ready. Android is still in charge of the display."
+	echo "  to take the panel:  $BINDIR/lindroid test   (or: weston)"
+	echo "  to give it back:    $BINDIR/lindroid back"
+	exec chroot "$ROOTFS" /bin/sh -c \
+		"export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+		 exec /bin/sh -l"
+}
+
+cmd_run() {
+	setup_mounts
+	need_chroot
+	[ $# -eq 0 ] && { echo 'usage: lindroid run <command>' >&2; exit 2; }
+	exec chroot "$ROOTFS" /bin/sh -c \
+		"export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+		 exec \"\$@\"" sh "$@"
+}
+
+cmd_test() {
+	setup_mounts
+	need_chroot
+	release_panel || exit 1
+	# kmsclaim stays in the foreground on purpose: DRM master is released
+	# when its fd closes, so its lifetime is what keeps the panel ours.
+	say "colour bars incoming. '$BINDIR/lindroid back' to return it."
+	exec chroot "$ROOTFS" /usr/bin/kmsclaim
+}
+
+cmd_weston() {
+	setup_mounts
+	need_chroot
+	release_panel || exit 1
+	# --drm-device takes the sysname, not the path. weston hands the string
+	# straight to udev_device_new_from_subsystem_sysname(), so a path makes it
+	# search sysfs for an entry named "/dev/dri/card0" and find nothing.
+	say "starting weston. '$BINDIR/lindroid back' to return it."
+	exec chroot "$ROOTFS" /bin/sh -c \
+		"export PATH=/usr/bin:/bin
+		 export XDG_RUNTIME_DIR=/run/user/0
+		 mkdir -p /run/user/0 && chmod 700 /run/user/0
+		 exec /usr/bin/weston \
+		     --backend=drm-backend.so \
+		     --drm-device=card0 \
+		     --renderer=noop \
+		     --width=1080 --height=2400 \
+		     --socket=wayland-0"
+}
+
+cmd_back() {
+	restore_panel
+}
+
+case "${1:-shell}" in
+shell)   shift; cmd_shell "$@" ;;
+run)     shift; cmd_run "$@" ;;
+test)    cmd_test ;;
+weston)  cmd_weston ;;
+back)    cmd_back ;;
+status)  cmd_status ;;
+-h|--help|help)
+	sed -n '3,22p' "$0" | sed 's/^# \?//'
+	;;
+*)
+	warn "unknown command: $1"
+	cmd_status
+	exit 2
+	;;
+esac
