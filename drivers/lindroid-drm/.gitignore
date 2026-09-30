@@ -1,0 +1,9 @@
+*.o
+*.cmd
+*.ko
+*.mod
+*.mod.c
+*.order
+*.symvers
+tools/lindroid-ctl
+tools/test-control

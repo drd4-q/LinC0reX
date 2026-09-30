@@ -1,0 +1,13 @@
+# build artefacts
+*.o
+*.ko
+*.cmd
+*.mod
+*.symvers
+*.order
+
+# userspace tools
+tools/lindroid-ctl
+tools/test-control
+drivers/lindroid-drm/tools/lindroid-ctl
+drivers/lindroid-drm/tools/test-control

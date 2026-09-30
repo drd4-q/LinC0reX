@@ -1,0 +1,73 @@
+diff --git a/arch/arm64/Makefile b/arch/arm64/Makefile
+index b5be53de7..21248cf8e 100644
+--- a/arch/arm64/Makefile
++++ b/arch/arm64/Makefile
+@@ -132,8 +132,12 @@ else
+ KBUILD_TARGET   := Image
+ endif
+ 
++# dtbo.img excluded: see arch/arm64/boot/Makefile.  The stock boot.img has no
++# appended DTB and the flashable zip ships the kernel alone, so the image would
++# be built and then thrown away -- while requiring the unavailable "mkdtimg"
++# binary to do it.
+ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+-KBUILD_TARGET   += dtbo.img
++# KBUILD_TARGET += dtbo.img
+ endif
+ 
+ # Default target when executing plain make
+diff --git a/arch/arm64/boot/Makefile b/arch/arm64/boot/Makefile
+index d86ea4caf..f3339507e 100644
+--- a/arch/arm64/boot/Makefile
++++ b/arch/arm64/boot/Makefile
+@@ -16,7 +16,14 @@
+ 
+ OBJCOPYFLAGS_Image :=-O binary -R .note -R .note.gnu.build-id -R .comment -S
+ 
+-targets := Image Image.bz2 Image.gz Image.lz4 Image.lzma Image.lzo dtbo.img
++# dtbo.img is intentionally not built.
++#
++# The stock boot.img ships no appended DTB and the flashable zip must not carry
++# one, so there is nothing to package.  Building it also needs the external
++# "mkdtimg" binary, which is not present and has no maintained source anymore.
++# Dropping it from the target list keeps the build self-contained and the
++# packaged layout identical to stock.
++targets := Image Image.bz2 Image.gz Image.lz4 Image.lzma Image.lzo
+ 
+ DTBO_OBJS := $(shell find -L $(obj)/dts/ -name \*.dtbo)
+ 
+diff --git a/arch/arm64/configs/stone_defconfig b/arch/arm64/configs/stone_defconfig
+index 6c136fc00..3296efc99 100644
+--- a/arch/arm64/configs/stone_defconfig
++++ b/arch/arm64/configs/stone_defconfig
+@@ -858,3 +858,6 @@ CONFIG_RMNET_DATA_FC=y
+ CONFIG_RMNET_DATA_DEBUG_PKT=y
+ CONFIG_RMNET_SHS=y
+ CONFIG_RMNET_OFFLOAD=y
++CONFIG_KSU=y
++
++CONFIG_DRM_LINDROID_EVDI=y
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index e0eda1a5c..ec7c0e79a 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -230,4 +230,7 @@ source "drivers/interconnect/Kconfig"
+ 
+ source "drivers/counter/Kconfig"
+ 
++source "drivers/lindroid-drm/Kconfig"
++
++source "drivers/kernelsu/Kconfig"
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index aaef17cc6..2ebe7335f 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -186,3 +186,7 @@ obj-$(CONFIG_SIOX)		+= siox/
+ obj-$(CONFIG_GNSS)		+= gnss/
+ obj-$(CONFIG_INTERCONNECT)	+= interconnect/
+ obj-$(CONFIG_COUNTER)		+= counter/
++
++obj-$(CONFIG_DRM_LINDROID_EVDI)	+= lindroid-drm/
++
++obj-$(CONFIG_KSU) += kernelsu/
