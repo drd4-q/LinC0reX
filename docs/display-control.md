@@ -4,15 +4,23 @@ Kernel-side support for driving the phone display from a normal Linux
 userspace, so a Wayland compositor running Phosh or GNOME Mobile can take the
 physical panel over from Android and hand it back.
 
-## Why the panel cannot be programmed from Linux directly
+## Correction: the panel *can* be programmed from Linux
 
-There is no `CONFIG_DRM_MSM` in this kernel. The physical panel is scanned out
-by the Android userspace display HAL, not by a DRM driver, so a Linux process
-cannot reprogram the display hardware the way a desktop DRM client would.
+An earlier version of this document claimed the panel could not be programmed
+from Linux because there is no `CONFIG_DRM_MSM` in this kernel. That was wrong
+on both counts. `DRM_MSM` is not disabled here, and the physical panel is
+driven by SDE over `card0` as an ordinary atomic KMS device.
 
-What Linux *can* do is drive the `evdi-lindroid` virtual display, which the
-Lindroid composer hands to the panel. This is the same path the desktop already
-uses, with an explicit switch on top of it.
+This was confirmed on the device: a plain userspace process takes DRM master on
+`card0` and commits a modeset that the panel displays. See
+[panel-handover.md](panel-handover.md) for the full procedure.
+
+What remains true is the motivation for the driver below. Driving the panel
+directly is not the same as having a *compositor* on it, and a compositor
+needs more than a modeset: a GPU that Mesa can see, and a display stack that
+starts. KGSL exposes no DRM node, so neither Mesa nor freedreno can reach the
+Adreno 619. The EVDI path is what carries a real Linux compositor's output to
+the panel in the meantime, which is what the rest of this document describes.
 
 ## The switch
 
