@@ -212,10 +212,21 @@ cmd_weston() {
 	# --drm-device takes the sysname, not the path. weston hands the string
 	# straight to udev_device_new_from_subsystem_sysname(), so a path makes it
 	# search sysfs for an entry named "/dev/dri/card0" and find nothing.
+	# fmtshim.so is only needed because SDE advertises a format twice and
+	# weston 10 asserts on it. If it is absent, weston will die on the
+	# duplicate, so say so rather than letting the abort look mysterious.
+	PRELOAD=""
+	if [ -f "$ROOTFS/usr/lib/fmtshim.so" ]; then
+		PRELOAD="export LD_PRELOAD=/usr/lib/fmtshim.so"
+	else
+		warn "no /usr/lib/fmtshim.so - weston will abort on duplicate formats"
+	fi
+
 	say "starting weston. '$BINDIR/lindroid back' to return it."
 	exec chroot "$ROOTFS" /bin/sh -c \
 		"export PATH=/usr/bin:/bin
 		 export XDG_RUNTIME_DIR=/run/user/0
+		 $PRELOAD
 		 mkdir -p /run/user/0 && chmod 700 /run/user/0
 		 exec /usr/bin/weston \
 		     --backend=drm-backend.so \
