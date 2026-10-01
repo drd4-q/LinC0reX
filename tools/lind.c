@@ -160,6 +160,27 @@ struct pointer {
 
 static struct wl_list surfaces;
 static struct wl_list pointers;
+
+/*
+ * Frame pacing.
+ *
+ * Repainting on every client commit is what made the panel flicker. A client
+ * that commits as fast as it can gets its frame callback straight back, commits
+ * again immediately, and the buffer the panel is scanning out is rewritten
+ * faster than the panel reads it. The tear is then continuous rather than
+ * occasional, which is what it looked like from the front.
+ *
+ * Every compositor paces this. weston has a repaint window; sway and cage cap
+ * themselves at the output refresh; and the frame callback is sent once the
+ * frame has actually been presented, not when it was drawn. Page flip is how
+ * that is normally arranged, and it is unavailable here - the request is
+ * accepted and PAGE_FLIP_DONE never arrives, measured as events=1 of type
+ * DRM_EVENT_VBLANK_2 against flip requests on every frame.
+ *
+ * So the pacing is done with a timer at the panel's refresh period instead.
+ */
+static struct surface *pending_surface;
+static struct wl_event_source *pace_timer;
 static uint32_t serial_counter;
 static uint32_t last_x, last_y;
 static int touch_active;
@@ -255,10 +276,24 @@ static void repaint(struct surface *dirty)
 	}
 }
 
+/* Repaint, then release the client waiting on this frame. */
+static int pace_dispatch(void *data)
+{
+	struct surface *s = pending_surface;
+
+	(void)data;
+	pending_surface = NULL;
+	if (s) {
+		repaint(s);
+		send_frame_callbacks(s);
+	}
+	return 0;
+}
+
 /* Printed on demand, so a flicker report can be turned into facts. */
 static void dump_stats(void)
 {
-	fprintf(stderr, "lind: repaint=%lu frames=%d\n", drm.n_repaint,
+	fprintf(stderr, "lind: repaint=%lu frames=%lu\n", drm.n_repaint,
 		drm.n_frames);
 }
 
@@ -498,8 +533,15 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r)
 		}
 	}
 
-	/* A commit is the client saying it wants this on screen. Do it now. */
-	repaint(s);
+	/*
+	 * A commit means the client wants this on screen, but the screen is
+	 * shared with the panel's scanout. Repainting right now would let a
+	 * fast client rewrite the buffer mid-scan, so the frame is scheduled
+	 * and the callback is sent when it has actually been shown.
+	 */
+	pending_surface = s;
+	if (pace_timer)
+		wl_event_source_timer_update(pace_timer, 0);
 }
 
 static const struct wl_surface_interface surface_impl = {
@@ -1247,6 +1289,14 @@ int main(void)
 	loop = wl_display_get_event_loop(display);
 
 
+
+	pace_timer = wl_event_loop_add_timer(loop, pace_dispatch, NULL);
+	if (!pace_timer) {
+		fprintf(stderr, "lind: не создался таймер частоты\n");
+		wl_display_destroy(display);
+		drm_teardown();
+		return 1;
+	}
 
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
 	if (touch_fd < 0)
