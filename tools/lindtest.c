@@ -137,16 +137,56 @@ static void pointer_axis(void *d, struct wl_pointer *p, uint32_t time,
 	(void)d; (void)p; (void)time; (void)axis; (void)value;
 }
 
+/*
+ * Every event needs a listener, including the ones this test has no use for.
+ * A NULL slot is not "ignored": libwayland logs "listener function for opcode
+ * N of wl_pointer is NULL" and the client stops, which reads as the compositor
+ * hanging rather than as a missing stub.
+ *
+ * Opcode 5 is frame - the one that actually arrived here. Signatures are taken
+ * from wayland-client-protocol.h as it exists in this tree, which is older than
+ * current: axis_discrete carries (axis, discrete) with no time argument, and
+ * frame takes no time either.
+ */
+static void pointer_frame(void *d, struct wl_pointer *p)
+{
+	(void)d; (void)p;
+}
+
+static void pointer_axis_source(void *d, struct wl_pointer *p, uint32_t src)
+{
+	(void)d; (void)p; (void)src;
+}
+
+static void pointer_axis_stop(void *d, struct wl_pointer *p, uint32_t t,
+		uint32_t a)
+{
+	(void)d; (void)p; (void)t; (void)a;
+}
+
+static void pointer_axis_discrete(void *d, struct wl_pointer *p, uint32_t a,
+		int32_t v)
+{
+	(void)d; (void)p; (void)a; (void)v;
+}
+
+static void pointer_axis_value120(void *d, struct wl_pointer *p, uint32_t a,
+		int32_t v)
+{
+	(void)d; (void)p; (void)a; (void)v;
+}
+
 static const struct wl_pointer_listener pointer_impl = {
 	.enter = pointer_enter,
 	.leave = pointer_leave,
 	.motion = pointer_motion,
 	.button = pointer_button,
 	.axis = pointer_axis,
-	.frame = NULL,
-	.axis_source = NULL,
-	.axis_stop = NULL,
-	.axis_discrete = NULL,
+	.frame = pointer_frame,
+	.axis_source = pointer_axis_source,
+	.axis_stop = pointer_axis_stop,
+	.axis_discrete = pointer_axis_discrete,
+	.axis_value120 = pointer_axis_value120,
 };
 
 static void wm_base_ping(void *d, struct xdg_wm_base *b, uint32_t serial)

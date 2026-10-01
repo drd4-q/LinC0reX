@@ -37,6 +37,7 @@
 #define _GNU_SOURCE
 
 #include <errno.h>
+#include <time.h>
 #include <fcntl.h>
 #include <linux/input.h>
 #include <signal.h>
@@ -135,6 +136,147 @@ static struct {
 	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
 } drm;
 
+/* --- backlight -----------------------------------------------------------
+ *
+ * The panel is a backlight device in sysfs, and nothing here is exotic. What
+ * made it visible is that Android's SurfaceFlinger owns it normally, so when we
+ * take the display the panel stays at whatever level SF last set - 315 of 2047
+ * on this phone. Without touching this, a perfectly correct compositor looks
+ * dim and gets blamed for it.
+ *
+ * Written as a persistent handle: the sysfs file rejects open-per-write more
+ * slowly than it accepts one long-lived fd, and the write is on the gesture
+ * path.
+ */
+#define BACKLIGHT_DIR "/sys/class/backlight/panel0-backlight/"
+
+static int bl_fd = -1;
+static int bl_max = 2047;
+static int bl_level;
+static int osd_until;              /* ms, monotonic; 0 = nothing shown */
+
+static void brightness_set(int level);
+
+static int brightness_init(int level)
+{
+	char path[sizeof(BACKLIGHT_DIR) + 32];
+	int fd;
+
+	snprintf(path, sizeof(path), "%smax_brightness", BACKLIGHT_DIR);
+	bl_max = 2047;
+	{
+		int v = 0;
+		unsigned maj, min;
+
+		if (access(path, R_OK) == 0) {
+			FILE *f = fopen(path, "r");
+
+			if (f && fscanf(f, "%d", &v) == 1 && v > 0)
+				bl_max = v;
+			if (f)
+				fclose(f);
+		}
+		(void)maj;
+		(void)min;
+	}
+
+	snprintf(path, sizeof(path), "%sbrightness", BACKLIGHT_DIR);
+	fd = open(path, O_WRONLY);
+	if (fd < 0) {
+		fprintf(stderr,
+			"lind: не открыть %s (%s) - яркость не трогаю\n",
+			path, strerror(errno));
+		return -1;
+	}
+	bl_fd = fd;
+
+	brightness_set(level < 0 ? bl_max : level);
+	return 0;
+}
+
+static void brightness_set(int level)
+{
+	char buf[16];
+	int n;
+
+	if (bl_fd < 0)
+		return;
+	/* 0 is off, and anything near it reads as off. A floor of a tenth
+	 * keeps a downward swipe from looking like a broken panel. */
+	if (level < bl_max / 10)
+		level = bl_max / 10;
+	if (level > bl_max)
+		level = bl_max;
+	if (level == bl_level)
+		return;
+
+	n = snprintf(buf, sizeof(buf), "%d\n", level);
+	if (write(bl_fd, buf, n) < 0) {
+		fprintf(stderr, "lind: яркость %d не записалась (%s)\n",
+			level, strerror(errno));
+		return;
+	}
+	bl_level = level;
+
+	/* Show it, so the gesture is visibly doing something rather than
+	 * silently altering the screen. */
+	{
+		struct timespec ts;
+
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		osd_until = (int)(ts.tv_sec * 1000 +
+				  ts.tv_nsec / 1000000) + 1200;
+	}
+}
+
+/* Vertical bar on the right, like the one Android puts up. */
+static void draw_osd(void)
+{
+	struct timespec ts;
+	int now, h, w, x0, y0, bar_h, i;
+	uint32_t *p;
+	uint32_t col;
+
+	if (!osd_until)
+		return;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	now = (int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	if (now > osd_until) {
+		osd_until = 0;
+		return;
+	}
+
+	h = drm.h;
+	w = drm.w;
+	bar_h = h * 3 / 4;
+	y0 = (h - bar_h) / 2;
+	x0 = w - 60;
+	if (x0 < 0 || bar_h <= 0)
+		return;
+
+	/* Backdrop. */
+	for (i = y0 - 8; i < y0 + bar_h + 8; i++) {
+		if (i < 0 || i >= h)
+			continue;
+		p = drm.map[drm.render] + (size_t)i * drm.stride[drm.render] / 4;
+		for (int x = x0 - 8; x < x0 + 40 && x < w; x++)
+			p[x] = 0xC0000000;
+	}
+
+	/* Filled portion, level from the bottom. */
+	bar_h = bar_h * bl_level / bl_max;
+	for (i = 0; i < bar_h; i++) {
+		int y = y0 + (h * 3 / 4) - 1 - i;
+
+		if (y < y0 || y >= h)
+			continue;
+		p = drm.map[drm.render] + (size_t)y * drm.stride[drm.render] / 4;
+		col = 0xFF40C0FF;
+		for (int x = x0 - 4; x < x0 + 36 && x < w; x++)
+			p[x] = col;
+	}
+}
+
 /* --- state -------------------------------------------------------------- */
 
 enum surface_role {
@@ -196,12 +338,15 @@ static struct wl_list pointers;
  *
  * So the pacing is done with a timer at the panel's refresh period instead.
  */
+static int64_t ev_last_us;
+static void arm_keepalive(void);
 static struct surface *pending_surface;
 static struct surface *flip_surface;
 static struct wl_event_source *pace_timer;
 static int pace_armed;
-/* The panel runs at 120 Hz. */
-#define PACE_MSEC 8
+/* The panel runs at 120 Hz, period measured at 8343 us. A hair over that, so a
+ * keep-alive flip always finds the next vblank instead of racing it. */
+#define PACE_MSEC 9
 static uint32_t serial_counter;
 static uint32_t last_x, last_y;
 static int touch_active;
@@ -290,6 +435,8 @@ static void repaint(struct surface *dirty)
 			 b->width, b->height, 0, 0);
 	}
 
+	draw_osd();
+
 	drm.n_repaint++;
 
 	/*
@@ -319,6 +466,27 @@ static void repaint(struct surface *dirty)
 }
 
 /*
+ * Present a frame, or remember that one is owed.
+ *
+ * Presentation is self-clocked on the flip completion rather than on a timer.
+ * The timer and the panel do not agree: measured flip intervals were 25 ms at
+ * first and then alternating 7.8 and 17.3 ms against a panel period of 8.343 ms,
+ * so the frame rate was both well under the refresh and irregular. An irregular
+ * swap lands mid-scan, which shows as a band near the top of the screen a couple
+ * of times a second.
+ */
+static void maybe_present(struct surface *s)
+{
+	if (drm.flip_pending) {
+		pending_surface = s;
+		return;
+	}
+
+	pending_surface = NULL;
+	repaint(s);
+}
+
+/*
  * The DRM fd is readable when a flip completes. The event type is logged for
  * the first few: "no event" and "an event of some other type" look identical
  * from a frame counter, and that ambiguity cost real time once already.
@@ -340,9 +508,22 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 	}
 
 	drm.n_events++;
-	if (drm.n_events <= 8)
-		fprintf(stderr, "lind: drm event type=%d seq=%llu\n",
-			ev.base.type, (unsigned long long)ev.sequence);
+	if (drm.n_events <= 8) {
+		struct timespec ts;
+
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		if (ev_last_us)
+			fprintf(stderr,
+				"lind: flip done #%lu +%lld us (type=%d)\n",
+				drm.n_events,
+				(long long)(ts.tv_sec * 1000000 +
+					    ts.tv_nsec / 1000 - ev_last_us),
+				ev.base.type);
+		else
+			fprintf(stderr, "lind: flip done #1 (type=%d)\n",
+				ev.base.type);
+		ev_last_us = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+	}
 
 	if (!is_flip_done(ev.base.type))
 		return 0;
@@ -357,27 +538,64 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 	if (s)
 		send_frame_callbacks(s);
 
+	/* The completion is the clock. Take the next frame straight away
+	 * rather than waiting on a timer that does not agree with the
+	 * panel. */
+	if (pending_surface)
+		maybe_present(pending_surface);
+	else
+		arm_keepalive();
+
 	return 0;
 }
 
 /* Repaint, then release the client waiting on this frame. */
+/*
+ * Keep the display fed.
+ *
+ * Presentation is self-clocked on the flip completion, which is right for rate
+ * and regularity but means that when the client stops committing there are no
+ * flips at all - and this panel powers down when it stops being fed. The screen
+ * then appears to switch itself off, usually noticed the moment a finger lands
+ * on it and the client does not respond.
+ *
+ * So this re-presents the buffer already on screen, once per panel period,
+ * whenever there is nothing new. No redraw, just the flip. Real compositors do
+ * the same job with a keep-awake timer, and weston has one for this reason.
+ */
+static void arm_keepalive(void)
+{
+	/* Re-arming a pending timer pushes its deadline out again, so it must
+	 * only be armed when it is not already: a client committing every
+	 * millisecond would otherwise postpone the frame forever, which cost
+	 * 13 repaints against 28004 client frames before it was noticed. */
+	if (pace_timer && !pace_armed) {
+		wl_event_source_timer_update(pace_timer, PACE_MSEC);
+		pace_armed = 1;
+	}
+}
+
 static int pace_dispatch(void *data)
 {
-	struct surface *s = pending_surface;
-
 	(void)data;
-	pending_surface = NULL;
 	pace_armed = 0;
 
-	/* The frame callbacks go out in on_drm_event(), when the flip this
-	 * requests has actually landed. Sending them here would tell the
-	 * client the frame is on screen before it is. */
-	if (s)
-		repaint(s);
+	if (!drm.flip_pending) {
+		if (drmModePageFlip(drm.fd, drm.crtc_id,
+				   drm.fb[drm.scanout],
+				   DRM_MODE_PAGE_FLIP_EVENT,
+				   &drm.flip_event) == 0)
+			drm.flip_pending = 1;
+		else
+			drm.n_flip_err++;
+	}
 
-	/* A timer source whose callback returns 0 is removed from the loop.
-	 * Returning 0 here meant exactly one repaint for the life of the
-	 * process, which looked like a compositor that had simply stopped. */
+	/* Always re-armed, including when the flip above failed: the panel
+	 * must keep being fed or it goes dark. */
+	arm_keepalive();
+
+	/* A timer callback returning 0 is removed from the loop, and this
+	 * timer is the only thing keeping the display alive. */
 	return 1;
 }
 
@@ -633,17 +851,7 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r)
 	drm.n_commits++;
 	pending_surface = s;
 
-	/*
-	 * Only arm if it is not already armed. Re-arming a timer that is
-	 * pending pushes its deadline out again, so a client committing
-	 * every millisecond postpones the frame forever and the compositor
-	 * starves: measured, the client drew 28004 frames and the
-	 * compositor repainted 13.
-	 */
-	if (pace_timer && !pace_armed) {
-		wl_event_source_timer_update(pace_timer, PACE_MSEC);
-		pace_armed = 1;
-	}
+	maybe_present(s);
 }
 
 static const struct wl_surface_interface surface_impl = {
@@ -787,6 +995,52 @@ static void send_pointer(uint32_t type, uint32_t button, uint32_t state)
  * point where a full queue would keep the loop busy for long. */
 #define EV_BATCH 64
 
+static int swipe_y0, swipe_bright0, swipe_moved;
+
+/*
+ * The touch panel reports in its own coordinate range, not in display pixels.
+ * On this phone fts_ts advertises ABS_MT_POSITION_X up to 10800 and
+ * ABS_MT_POSITION_Y up to 24000, for a 1080x2400 panel - ten times finer than
+ * the screen. Ask the device rather than assume a factor, since that ratio is a
+ * property of this digitiser and not a law.
+ */
+static int touch_max_x = 1080, touch_max_y = 2400;
+
+
+static void read_touch_range(int fd)
+{
+	struct input_absinfo ai;
+	unsigned char buf[sizeof(ai)];
+
+	if (ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), buf) == 0) {
+		memcpy(&ai, buf, sizeof(ai));
+		if (ai.maximum > 0)
+			touch_max_x = ai.maximum;
+	}
+	if (ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), buf) == 0) {
+		memcpy(&ai, buf, sizeof(ai));
+		if (ai.maximum > 0)
+			touch_max_y = ai.maximum;
+	}
+
+	fprintf(stderr, "lind: touch range x=%d y=%d (fd=%d)\n",
+		touch_max_x, touch_max_y, fd);
+}
+
+/*
+ * Persistent across calls, deliberately.
+ *
+ * This was local to read_touch() and so reinitialised on every wakeup. The
+ * panel keeps reporting a finger down over many batches, but each batch started
+ * with touching == 0, so the first batch set the origin and every batch after it
+ * looked like the finger being lifted. A drag therefore never got past its
+ * first movement.
+ *
+ * slot, last_x, last_y and touching are panel state and belong here. Only
+ * have_abs is per-batch, and it is cleared once its SYN_REPORT is consumed -
+ * it cannot be, because a SYN_REPORT may arrive in a later batch than the ABS
+ * events it closes.
+ */
 struct touch_state {
 	int have_abs;
 	int slots_used;
@@ -795,10 +1049,11 @@ struct touch_state {
 	int touching;
 };
 
+static struct touch_state ts;
+
 static int read_touch(int fd, uint32_t mask, void *data)
 {
 	struct input_event ev;
-	struct touch_state ts = { 0 };
 	int n;
 
 	(void)mask;
@@ -829,28 +1084,81 @@ static int read_touch(int fd, uint32_t mask, void *data)
 					ts.touching = 0;
 				}
 				break;
+			/*
+			 * This digitiser reports multi-touch protocol B only:
+			 * getevent -p on fts_ts lists ABS_MT_POSITION_X/Y
+			 * and no ABS_X/ABS_Y at all. Handling only the
+			 * single-touch codes leaves every coordinate at zero,
+			 * which is why the brightness gesture did nothing and
+			 * the pointer had nowhere to go.
+			 */
 			case ABS_X:
-				ts.last_x = ev.value;
+			case ABS_MT_POSITION_X:
+				ts.last_x = ev.value * (int)drm.w /
+					    (touch_max_x ? touch_max_x : 1);
 				break;
 			case ABS_Y:
-				ts.last_y = ev.value;
+			case ABS_MT_POSITION_Y:
+				ts.last_y = ev.value * (int)drm.h /
+					    (touch_max_y ? touch_max_y : 1);
 				break;
 			}
 		} else if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
 			if (ts.have_abs) {
 				last_x = (uint32_t)ts.last_x;
 				last_y = (uint32_t)ts.last_y;
+
 				if (ts.touching && !touch_active) {
+					/*
+					 * Finger down. This has to happen
+					 * before the drag below is
+					 * applied, not after: it
+					 * establishes the origin the
+					 * drag is measured from, and
+					 * clearing the moved flag
+					 * afterwards meant the first
+					 * movement of every swipe was
+					 * always spent setting the
+					 * origin - so a short swipe
+					 * did nothing at all.
+					 */
+					swipe_y0 = ts.last_y;
+					swipe_bright0 = bl_level;
+					swipe_moved = 0;
 					send_pointer(WL_POINTER_MOTION, 0, 0);
 					touch_active = 1;
 				} else if (ts.touching) {
 					send_pointer(WL_POINTER_MOTION, 0, 0);
+
+					/*
+					 * Vertical drag sets brightness,
+					 * as it does on Android. Absolute
+					 * rather than incremental, so a
+					 * drag that overshoots comes
+					 * back instead of accumulating.
+					 */
+					if (bl_fd >= 0) {
+						int dy = ts.last_y - swipe_y0;
+						int span = (int)drm.h;
+
+						if (dy > -10 && dy < 10)
+							swipe_moved = 0;
+						else if (span > 0) {
+							brightness_set(swipe_bright0 -
+								       dy * bl_max /
+								       span * 3 / 2);
+							swipe_moved = 1;
+						}
+					}
 				} else if (!ts.touching && touch_active) {
+					swipe_moved = 0;
 					send_pointer(WL_POINTER_BUTTON,
 						     BTN_LEFT,
 						     WL_POINTER_BUTTON_STATE_RELEASED);
 					touch_active = 0;
 				}
+
+				ts.have_abs = 0;
 			}
 		}
 	}
@@ -1398,6 +1706,18 @@ int main(void)
 	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
 			     NULL);
 
+	/* Start the keep-alive chain here rather than waiting for the first
+	 * flip completion to start it: with no client there is no commit,
+	 * so nothing else ever arms the timer and the panel is never fed
+	 * again. */
+	arm_keepalive();
+
+	/* Android's SurfaceFlinger normally owns this. Once we take the
+	 * display the panel keeps whatever level it last had, 315 of 2047
+	 * on this phone, which reads as a dim screen rather than as a
+	 * compositor problem. -1 means full. */
+	brightness_init(-1);
+
 	pace_timer = wl_event_loop_add_timer(loop, pace_dispatch, NULL);
 	if (!pace_timer) {
 		fprintf(stderr, "lind: не создался таймер частоты\n");
@@ -1407,6 +1727,7 @@ int main(void)
 	}
 
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
+	read_touch_range(touch_fd);
 	if (touch_fd < 0)
 		fprintf(stderr, "lind: %s: %s (тач не будет)\n", TOUCH_DEV,
 			strerror(errno));
