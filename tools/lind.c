@@ -40,6 +40,8 @@
 #include <time.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -135,6 +137,404 @@ static struct {
 	unsigned long n_repaint, n_frames, n_commits;
 	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
 } drm;
+
+/* --- text ----------------------------------------------------------------
+ *
+ * FreeType over DejaVuSans. DejaVuSans.ttf is already in the chroot (weston's
+ * dependencies pulled it in), so the rasteriser was the only missing piece.
+ *
+ * Rows are read at FT_Bitmap.pitch. Rounding the glyph width up to a multiple
+ * of four instead - which is what this did first - is one byte off per row, so
+ * the glyph shears into a diagonal smear: recognisably the right shape, entirely
+ * unreadable. The metric that gives it away is printed right next to the width.
+ */
+static FT_Library ft_lib;
+static FT_Face ft_face;
+static int ft_ready;
+
+static int text_init(void)
+{
+	static const char *paths[] = {
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+	};
+	size_t i;
+
+	if (FT_Init_FreeType(&ft_lib))
+		return -1;
+	for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+		if (FT_New_Face(ft_lib, paths[i], 0, &ft_face) == 0) {
+			ft_ready = 1;
+			return 0;
+		}
+	}
+	FT_Done_FreeType(ft_lib);
+	return -1;
+}
+
+static int text_width(const char *s, int px)
+{
+	int w = 0;
+
+	if (!ft_ready || FT_Set_Pixel_Sizes(ft_face, 0, px))
+		return 0;
+	while (*s) {
+		if (FT_Load_Char(ft_face, (unsigned char)*s, FT_LOAD_RENDER) == 0)
+			w += (ft_face->glyph->advance.x + 31) >> 6;
+		s++;
+	}
+	return w;
+}
+
+/* y is the top of the line, so callers need not know the face's ascent. */
+static void draw_text(int x, int y, int px, uint32_t colour, const char *s)
+{
+	int sr = (colour >> 16) & 0xFF, sg = (colour >> 8) & 0xFF;
+	int sb = colour & 0xFF, sa = (colour >> 24) & 0xFF;
+	int baseline;
+
+	if (!ft_ready || FT_Set_Pixel_Sizes(ft_face, 0, px))
+		return;
+	baseline = y + (int)(ft_face->size->metrics.ascender / 64);
+
+	while (*s) {
+		FT_GlyphSlot g;
+		int gy, top, advance, pitch;
+		const unsigned char *row;
+
+		if (FT_Load_Char(ft_face, (unsigned char)*s, FT_LOAD_RENDER))
+			break;
+		g = ft_face->glyph;
+		top = baseline - g->bitmap_top;
+		pitch = (int)g->bitmap.pitch;
+		if (pitch <= 0)
+			pitch = (int)g->bitmap.width;
+
+		for (gy = 0; gy < (int)g->bitmap.rows; gy++) {
+			int gx;
+			uint32_t *dst;
+			int dy = top + gy;
+
+			if (dy < 0 || dy >= (int)drm.h)
+				continue;
+			dst = drm.map[drm.render] +
+			      (size_t)dy * drm.stride[drm.render] / 4;
+			row = g->bitmap.buffer + (size_t)gy * pitch;
+			for (gx = 0; gx < (int)g->bitmap.width; gx++) {
+				int cov = row[gx], px2 = x + gx, a;
+
+				if (!cov || px2 < 0 || px2 >= (int)drm.w)
+					continue;
+				a = cov * sa / 255;
+				if (!a)
+					continue;
+				dst[px2] = (a << 24) |
+					   (((sr * a + (dst[px2] >> 16 & 0xFF) *
+					      (255 - a)) / 255) << 16) |
+					   (((sg * a + (dst[px2] >> 8 & 0xFF) *
+					      (255 - a)) / 255) << 8) |
+					   (((sb * a + (dst[px2] & 0xFF) *
+					      (255 - a)) / 255));
+			}
+		}
+		advance = (g->advance.x + 31) >> 6;
+		x += advance > 0 ? advance : 1;
+		s++;
+	}
+}
+
+/* --- drawing primitives -------------------------------------------------- */
+
+/*
+ * Antialiased rounded rectangle.
+ *
+ * Coverage is computed from the distance to the corner circle rather than by
+ * supersampling: one pass, and the result is exact enough at these radii. The
+ * point is not precision - it is that hard corners are what make the panel's
+ * existing tear obvious, and a shape with a soft edge is the single cheapest way
+ * to make the compositor's own UI look deliberate rather than unfinished.
+ */
+static uint8_t round_cov(int x, int y, int w, int h, int r)
+{
+	int cx, cy;
+
+	if (r <= 0)
+		return 255;
+	if (x < r && y < r)
+		cx = r, cy = r;
+	else if (x >= w - r && y < r)
+		cx = w - 1 - r, cy = r;
+	else if (x < r && y >= h - r)
+		cx = r, cy = h - 1 - r;
+	else if (x >= w - r && y >= h - r)
+		cx = w - 1 - r, cy = h - 1 - r;
+	else
+		return 255;
+
+	{
+		int dx = x - cx, dy = y - cy;
+		int d2 = dx * dx + dy * dy;
+		int outer = r * r;
+		int inner = (r - 1) * (r - 1);
+
+		if (d2 <= inner)
+			return 255;
+		if (d2 >= outer)
+			return 0;
+		/* Between the two radii: linear in the distance. */
+		return (uint8_t)(255 * (outer - d2) / (outer - inner));
+	}
+}
+
+static void fill_round_rect(int x0, int y0, int w, int h, int r, uint32_t col)
+{
+	int sr = (col >> 16) & 0xFF, sg = (col >> 8) & 0xFF;
+	int sb = col & 0xFF, sa = (col >> 24) & 0xFF;
+	int x, y;
+
+	if (w <= 0 || h <= 0)
+		return;
+	if (r * 2 > w)
+		r = w / 2;
+	if (r * 2 > h)
+		r = h / 2;
+
+	for (y = 0; y < h; y++) {
+		uint32_t *row;
+		int dy = y0 + y;
+
+		if (dy < 0 || dy >= (int)drm.h)
+			continue;
+		row = drm.map[drm.render] +
+		      (size_t)dy * drm.stride[drm.render] / 4;
+		for (x = 0; x < w; x++) {
+			int dx = x0 + x, cov;
+
+			if (dx < 0 || dx >= (int)drm.w)
+				continue;
+			cov = round_cov(x, y, w, h, r);
+			if (!cov)
+				continue;
+			{
+				uint32_t d = row[dx];
+				int a = cov * sa / 255;
+
+				row[dx] = (d & 0xFF000000) |
+					  (((sr * a + (d >> 16 & 0xFF) *
+					    (255 - a)) / 255) << 16) |
+					  (((sg * a + (d >> 8 & 0xFF) *
+					    (255 - a)) / 255) << 8) |
+					  (((sb * a + (d & 0xFF) *
+					    (255 - a)) / 255));
+			}
+		}
+	}
+}
+
+/* --- home screen --------------------------------------------------------- */
+
+/*
+ * Layout taken from Phosh 0.24 (src/ui/app-grid-button.ui), which states it:
+ *
+ *   (360px screen width - 2*3px flowbox margins - (4-1)*6px column spacing)
+ *   / 4 columns = 84px
+ *
+ * Four columns, 3dp margin, 6dp spacing, 84dp button, on a 360dp-wide screen.
+ * This panel is 1080px wide, so the density scale is exactly 3 and every value
+ * below is dp * 3 - no guessing. The 40dp home bar comes from the same tree's
+ * home.ui, and the type sizes from src/stylesheet/common.css.
+ *
+ * What is ported is the arithmetic and the interaction: the grid, the tap
+ * targets, the spacing. The QML is not, because QML needs Qt Quick, and Qt Quick
+ * needs a GPU buffer path this compositor does not have - and reimplementing it
+ * would be slower than drawing it.
+ */
+#define UI_SCALE   3
+#define dp(n)      ((n) * UI_SCALE)
+
+#define GRID_COLUMNS  4
+#define GRID_MARGIN   dp(3)
+#define GRID_GAP      dp(6)
+#define GRID_BUTTON   dp(84)
+#define HOME_BAR_H    dp(40)
+
+struct app_entry {
+	char name[32];
+	char cmd[96];
+	uint32_t tint;
+};
+
+#define MAX_APPS 16
+static struct app_entry apps[MAX_APPS];
+static int n_apps;
+
+/*
+ * Apps come from a plain text file, one per line: name | command | tint.
+ *
+ * A hard-coded list would be a launcher that launches nothing, which is worse
+ * than no launcher. There are no .desktop entries here either - the chroot has
+ * no desktop environment to register with - so the list is a file the user can
+ * edit, with one working entry built in so the grid is never empty.
+ */
+#define APPS_FILE "/usr/share/lindroid/apps"
+
+static void load_apps(void)
+{
+	char line[160];
+	FILE *f;
+
+	n_apps = 0;
+	f = fopen(APPS_FILE, "r");
+	if (f) {
+		while (n_apps < MAX_APPS &&
+		       fgets(line, sizeof(line), f)) {
+			char *bar1, *bar2, *nl;
+			struct app_entry *a;
+
+			nl = strchr(line, '\n');
+			if (nl)
+				*nl = 0;
+			if (!line[0] || line[0] == '#')
+				continue;
+			bar1 = strchr(line, '|');
+			if (!bar1)
+				continue;
+			*bar1++ = 0;
+			bar2 = strchr(bar1, '|');
+			if (!bar2)
+				continue;
+			*bar2++ = 0;
+
+			a = &apps[n_apps++];
+			snprintf(a->name, sizeof(a->name), "%s", line);
+			snprintf(a->cmd, sizeof(a->cmd), "%s", bar1);
+			a->tint = (uint32_t)strtoul(bar2, NULL, 0);
+		}
+		fclose(f);
+	}
+
+	if (!n_apps) {
+		snprintf(apps[0].name, sizeof(apps[0].name), "Демо");
+		snprintf(apps[0].cmd, sizeof(apps[0].cmd), "lindtest 60");
+		apps[0].tint = 0xFF3D7BE8;
+		n_apps = 1;
+	}
+}
+
+/* Geometry, exactly as the formula above. */
+static void grid_geometry(int *btn, int *gap, int *margin)
+{
+	int m = GRID_MARGIN, g = GRID_GAP;
+
+	*margin = m;
+	*gap = g;
+	*btn = ((int)drm.w - 2 * m - (GRID_COLUMNS - 1) * g) / GRID_COLUMNS;
+}
+
+/* Which tile is at this point, or -1. */
+static int tile_at(int px, int py)
+{
+	int btn, gap, margin, col;
+	int rows, top, x0;
+
+	grid_geometry(&btn, &gap, &margin);
+	rows = (n_apps + GRID_COLUMNS - 1) / GRID_COLUMNS;
+	top = (int)drm.h - HOME_BAR_H - GRID_GAP - rows * btn -
+	      (rows - 1) * gap;
+	x0 = margin;
+
+	col = (px - x0) / (btn + gap);
+	if (col < 0 || col >= GRID_COLUMNS)
+		return -1;
+	if (py < top || py >= top + rows * btn + (rows - 1) * gap)
+		return -1;
+	{
+		int row = (py - top) / (btn + gap);
+		int idx = row * GRID_COLUMNS + col;
+
+		return idx < n_apps ? idx : -1;
+	}
+}
+
+static void draw_home(void)
+{
+	int btn, gap, margin, rows, top, i;
+
+	grid_geometry(&btn, &gap, &margin);
+	rows = (n_apps + GRID_COLUMNS - 1) / GRID_COLUMNS;
+	top = (int)drm.h - HOME_BAR_H - GRID_GAP - rows * btn - (rows - 1) * gap;
+
+	for (i = 0; i < n_apps; i++) {
+		int col = i % GRID_COLUMNS, row = i / GRID_COLUMNS;
+		int x = margin + col * (btn + gap);
+		int y = top + row * (btn + gap);
+		int lab = dp(13);
+		int tw = text_width(apps[i].name, lab);
+
+		fill_round_rect(x, y, btn, btn, dp(22), apps[i].tint);
+
+		/* Label below the tile, clipped to the button column so a long
+		 * name cannot bleed into its neighbour. */
+		if (tw > btn) {
+			char buf[sizeof(apps[i].name)];
+			int fit = 0;
+
+			snprintf(buf, sizeof(buf), "%s", apps[i].name);
+			while (fit > 0 && text_width(buf, lab) > btn)
+				buf[--fit] = 0;
+			snprintf(buf + fit, sizeof(buf) - fit, "...");
+			tw = text_width(buf, lab);
+			draw_text(x + (btn - tw) / 2, y + btn + dp(6), lab,
+				  0xFFE8EAF0, buf);
+		} else {
+			draw_text(x + (btn - tw) / 2, y + btn + dp(6), lab,
+				  0xFFE8EAF0, apps[i].name);
+		}
+	}
+
+	/* Home bar with a chevron, as in home.ui: nothing to do while it is
+	 * the only thing on screen, but it anchors the layout. */
+	fill_round_rect(0, (int)drm.h - HOME_BAR_H, (int)drm.w, HOME_BAR_H,
+			dp(18), 0xFF1B1D22);
+	{
+		int cx = (int)drm.w / 2, cy = (int)drm.h - HOME_BAR_H / 2;
+		int i2, s = dp(7);
+
+		for (i2 = -s; i2 <= s; i2++)
+			for (int j = 0; j < dp(4); j++) {
+				int x = cx + i2 - dp(6) + j;
+				int y = cy + dp(2) - j;
+
+				if (x < 0 || x >= (int)drm.w ||
+				    y < 0 || y >= (int)drm.h)
+					continue;
+				drm.map[drm.render][(size_t)y *
+					drm.stride[drm.render] / 4 + x] =
+					0xFF9AA0AC;
+			}
+	}
+}
+
+/*
+ * Launch through a double fork, so the compositor neither waits nor inherits a
+ * dying child. setpgid keeps a client from being killed by whatever signal
+ * stopped us, which on this phone is frequent.
+ */
+static void launch(const char *cmd)
+{
+	pid_t pid = fork();
+
+	if (pid < 0)
+		return;
+	if (pid == 0) {
+		setsid();
+		if (fork() > 0)
+			_exit(0);
+		execlp("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+		_exit(127);
+	}
+}
+
 
 /* --- backlight -----------------------------------------------------------
  *
@@ -477,6 +877,15 @@ static void repaint(struct surface *dirty)
 	}
 
 	brightness_flush();
+
+	/*
+	 * With no client mapped, the desktop itself. Phosh shows the launcher
+	 * rather than an empty gradient, and that is the whole point of a home
+	 * screen: it has to be what you see when nothing is running.
+	 */
+	if (!wl_list_empty(&surfaces))
+		draw_home();
+
 	draw_osd();
 
 	drm.n_repaint++;
@@ -1217,6 +1626,13 @@ static int read_touch(int fd, uint32_t mask, void *data)
 					send_pointer(WL_POINTER_BUTTON,
 						     BTN_LEFT,
 						     WL_POINTER_BUTTON_STATE_RELEASED);
+					if (wl_list_empty(&surfaces)) {
+						int idx = tile_at((int)last_x,
+								  (int)last_y);
+
+						if (idx >= 0)
+							launch(apps[idx].cmd);
+					}
 					touch_active = 0;
 				}
 
@@ -1779,6 +2195,11 @@ int main(void)
 	 * on this phone, which reads as a dim screen rather than as a
 	 * compositor problem. -1 means full. */
 	brightness_init(-1);
+
+	if (text_init())
+		fprintf(stderr, "lind: шрифт не загрузился, подписей нет\n");
+	load_apps();
+	fprintf(stderr, "lind: приложений в сетке: %d\n", n_apps);
 
 	pace_timer = wl_event_loop_add_timer(loop, pace_dispatch, NULL);
 	if (!pace_timer) {
