@@ -1,115 +1,124 @@
-# Why PAGE_FLIP_DONE never arrives
+# Page flip on this driver: what was actually wrong
 
-Measured, not inferred. The first version of this note claimed page flip worked,
-based on `vblanktest`. That was wrong: the `seq` values it printed were garbage
-and identical on all three runs, which was the signal, and it was not followed
-up. The real numbers came from instrumenting the compositor to log the event type
-rather than just counting events.
+## Correction first
 
-## The measurement
+The first version of this note concluded that the driver never sends a page flip
+completion, and pointed at two faults in `sde/sde_kms.c` as the cause. The
+first half of that is wrong, and it was wrong in a way that should have been
+caught sooner.
+
+What was measured at the time:
 
 ```
 lind: drm event type=2 len=32 seq=406503840272 time=0
-lind: repaint=3136 frames=3136 events=1 read_err=0 flip_err=0 dropped=3135 pending=1
+lind: repaint=3136 frames=3136 events=1 flip_err=0 dropped=3135 pending=1
 ```
 
-One event in 3136 flip requests. Type 2 is `DRM_EVENT_VBLANK_2`, not
-`DRM_EVENT_PAGE_FLIP_DONE` (4), and `time=0`. The requests themselves were all
-accepted — `flip_err=0`. So the ioctl succeeds, the hardware is programmed, and
-the completion never comes back.
+One event in 3136 flip requests. That reads as a driver that never completes a
+flip. It is not. **The compositor was matching the wrong event type.**
 
-## The cause
+This kernel stamps a flip completion as `DRM_EVENT_FLIP_COMPLETE`, value 0x02 —
+`drivers/gpu/drm/drm_atomic_uapi.c:906`, in `drm_mode_page_flip()`. lind compared
+against `DRM_EVENT_PAGE_FLIP_DONE = 0x04`, the value newer kernels renamed it to.
+The `type=2` in that log *was* a flip completion. It arrived, was discarded as
+unrecognised, `flip_pending` never cleared, and the compositor therefore never
+issued a second flip — so all 3135 later frames were dropped.
 
-`drm_crtc_send_vblank_event()` is never reached, because `sde_crtc->event` is
-always NULL when `sde_crtc_complete_flip()` runs. Nothing ever fills it in for a
-flip.
+One frame presented and one event logged look identical from the outside to a
+driver that never answers. The discriminating test was never run.
 
-Two independent faults on the same path, in
-`techpack/display/msm/sde/sde_kms.c` and `sde/sde_crtc.c`:
+With the constant fixed:
 
-**1. The commit that caches the event is filtered out for flips.**
-
-`sde_crtc->event = crtc->state->event` lives in `_sde_crtc_atomic_commit()`,
-reached via `sde_crtc_enable()` from the core's
-`drm_atomic_helper_commit_modeset_enables()`:
-
-```c
-/* Need to filter out CRTCs where only planes change. */
-if (!drm_atomic_crtc_needs_modeset(new_crtc_state))
-        continue;
+```
+lind: drm event type=2 seq=371177573128      (repeating)
+lind: repaint=1313 frames=1079
 ```
 
-and in kernel 5.4, `include/drm/drm_atomic.h:974`:
+1079 frames presented. Page flip works.
 
-```c
-static inline bool
-drm_atomic_crtc_needs_modeset(const struct drm_crtc_state *state)
-{
-	return state->mode_changed || state->active_changed ||
-	       state->connectors_changed;
-}
+## The second wrong signal
+
+`vblanktest` was cited as showing flip events arriving with an identical
+"garbage" `seq` on all three runs, and the note records that this looked wrong
+at the time. It was wrong, and following it up would have avoided the whole
+detour.
+
+Those three events were the vblank events from the test's own
+`drmWaitVBlank()` calls, read with a `struct drm_mode_page_flip_event`. Same
+struct mismatch, opposite direction. The vblank clock itself was always sound
+and is what makes scan-synchronised rendering possible:
+
+```
+#0 seq=195  tval_usec=661430
+#1 seq=196  tval_usec=669773    +8343 us
+#2 seq=197  tval_usec=678123    +8350 us
 ```
 
-A page flip changes only the plane. All three are false. The commit never runs.
+120 Hz, period 8343 us, timestamp in CLOCK_MONOTONIC. That part was never in
+question.
 
-**2. It reads the wrong state even when it does run.**
+## What is true about the driver
 
-`page_flip_common()` sets the event on the **new** state:
+The reasoning about the event-caching path holds, even though it was not the
+cause of the observed stall:
 
-```c
-crtc_state = drm_atomic_get_crtc_state(state, crtc);
-...
-crtc_state->event = event;
-```
+- `sde_crtc->event = crtc->state->event` in `_sde_crtc_atomic_commit()` is
+  reached via `sde_crtc_enable()` from
+  `drm_atomic_helper_commit_modeset_enables()`, which skips any CRTC where
+  `drm_atomic_crtc_needs_modeset()` is false — and that is
+  `mode_changed || active_changed || connectors_changed`, all of them false for a
+  page flip. The core's own comment there reads "Need to filter out CRTCs where
+  only planes change."
+- The same code reads `crtc->state->event`, which is still the old state until
+  `drm_atomic_helper_commit_hw_done()`. The event was set on the new one, by
+  `page_flip_common()`.
 
-`_sde_crtc_atomic_commit()` reads `crtc->state->event`, which is still the **old**
-state until `drm_atomic_helper_commit_hw_done()`. State swap happens at the end
-of `msm_atomic_commit_tail()`, after the point where the event is needed.
+So the patch in `~/dm-kernel` branch `fix/page-flip-completion` (commit
+`32770983e`) fixes a real latent bug: reading the wrong state, and caching it on
+a path flips do not take. It compiles.
 
-## The fix
+**Whether it is needed is not established.** The only build it could be tested
+against had already been corrected in userspace, and no A/B against the unpatched
+kernel was run. The 1079 frames above were produced with the patch in place and
+with the constant fixed at the same time, so they do not separate the two.
 
-Branch `fix/page-flip-completion` in `~/dm-kernel`, commit `32770983e`.
-`sde_kms_cache_flip_events()` reads the event from the state actually being
-committed, in `sde_kms_commit()`.
+Settling it would mean flashing the unpatched kernel and re-running, which costs
+another flash and buys little: double buffering works either way now, and the
+patch is a correctness fix to an event-caching path rather than a workaround.
 
-Ordering is what makes that the right seam. From `msm_atomic.c`, one commit runs:
+## Ordering of the commit, for the patch
+
+From `msm_atomic.c`, useful if this is ever revisited:
 
 | step | call |
 | --- | --- |
 | 3 | `drm_atomic_helper_commit_planes` |
-| 4 | `drm_atomic_helper_commit_modeset_enables` ← old event store, skipped for flips |
-| 5 | `kms->funcs->commit` ← **patch lands here** |
+| 4 | `drm_atomic_helper_commit_modeset_enables` — old event store, skipped for flips |
+| 5 | `kms->funcs->commit` — patch lands here |
 | 6 | `msm_atomic_wait_for_commit_done` → `sde_crtc_complete_flip()` |
-| 7 | `kms->funcs->complete_commit` ← too late |
-| 9 | `drm_atomic_helper_commit_hw_done` ← state swap |
+| 7 | `kms->funcs->complete_commit` — too late |
+| 9 | `drm_atomic_helper_commit_hw_done` — state swap |
 
-Step 5 runs on every atomic commit including a flip, and still precedes the flip
-completion at step 6. A modeset is unaffected: the old path caches the old
-state's event, which is NULL, and the new path fills it in.
+## Frame pacing, which was a real bug and remains
 
-The event is deliberately not moved onto the vblank path. The encoder already
-schedules the buffer swap at the frame boundary in command mode; this only tells
-the client the commit landed.
+Independent of the above, lind used to repaint on every client commit. A client
+committing at ~800 Hz got its frame callback straight back and re-committed, so
+the buffer was rewritten faster than the panel read it. Two distinct faults:
 
-Verified to compile: `CC techpack/display/msm/sde/sde_kms.o`, clean.
+- `wl_event_source_timer_update()` on an already-pending timer pushes the
+  deadline out again, so the frame was postponed forever: 13 repaints against
+  28004 client frames.
+- A timer callback returning 0 is *removed* from the loop, so one repaint for
+  the life of the process.
 
-## What this was blocking
+Fixed by arming only when not pending and returning 1. Compositor CPU went from
+70.9% to 2.6% for the same job.
 
-**weston.** Its one-frame stall has the same cause: with pixman rendering weston
-presents through a page flip, the completion never arrives, the repaint loop
-waits forever, and the single frame it managed to present is the only one. Not
-weston bookkeeping — a driver fact.
+## Check the event type before blaming the driver
 
-**Tearing.** With one buffer drawn in place, the compositor writes what the panel
-is scanning out. Frame pacing cut the visible flicker substantially (the flicker
-report improved and CPU went from 70.9% to 2.6%), but no rate limit removes the
-tear. Double buffering needs the flip.
-
-## Not in this change
-
-The DSI path itself was checked and is not implicated: `mdp_transfer_time=0` in
-`dsi_display_set_mode` looked suspicious, but mode sets only happen at startup
-and once at 60 Hz for a single 200 ms window, so the panel is not being re-set
-during rendering. The vblank IRQ is not the problem either — the commit-done
-event the encoder does report is what step 6 waits on, and it is step 5 that
-never runs.
+The lesson worth keeping, since it cost a kernel patch and a flash: when a DRM
+event "never arrives", log its type and compare it against what *this* kernel
+sends. `DRM_EVENT_VBLANK` / `FLIP_COMPLETE` / `CRTC_SEQUENCE` were 0x01/0x02/0x03
+here; the modern tree renumbers to `VBLANK_1`/`VBLANK_2`/`PAGE_FLIP`/
+`PAGE_FLIP_DONE`. A userspace built against newer libdrm headers against an older
+kernel is exactly where that mismatch lives.
