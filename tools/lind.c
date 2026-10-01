@@ -718,7 +718,7 @@ static int64_t draw_not_before_us;
  */
 #define VBLANK_TAG 0x4C494E44u
 static int scan_mode;
-static int64_t vblank_ns;
+static int64_t vblank_ns;   /* 0 = ни одного vblank ещё не видели */
 static int64_t vblank_period_ns = 8343000;   /* measured 8343 us */
 static unsigned long n_vblank;
 
@@ -1081,11 +1081,35 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 	}
 
 	if (ev.base.type == 3) {   /* DRM_EVENT_CRTC_SEQUENCE */
-		struct drm_event_crtc_sequence *ce = (void *)&ev;
+		/*
+		 * Take the instant from CLOCK_MONOTONIC on arrival, not from
+		 * the kernel's time_ns.
+		 *
+		 * time_ns comes back as zero on this driver - the same zero
+		 * that made the very first flip event look like garbage - so
+		 * using it left vblank_ns at 0, scan_begin() refused to start,
+		 * and the compositor drew nothing at all. It looked like a
+		 * dead touchscreen, because touch was working and nothing was
+		 * being redrawn.
+		 *
+		 * The event is queued a frame ahead and delivered at the vblank,
+		 * so arrival is the vblank to within dispatch latency, which is
+		 * far smaller than the 2.1 ms band slot. The period measured
+		 * here was 8.343 ms.
+		 */
+		struct timespec ts;
 
-		if (vblank_ns)
-			vblank_period_ns = ce->time_ns - vblank_ns;
-		vblank_ns = ce->time_ns;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		if (vblank_ns) {
+			int64_t d = ts.tv_sec * 1000000000LL + ts.tv_nsec -
+				    vblank_ns;
+
+			/* Ignore a blip: one late dispatch must not throw
+			 * the band schedule out by a whole frame. */
+			if (d > vblank_period_ns / 2 && d < vblank_period_ns * 3 / 2)
+				vblank_period_ns = d;
+		}
+		vblank_ns = ts.tv_sec * 1000000000LL + ts.tv_nsec;
 		n_vblank++;
 		if (n_vblank <= 6)
 			fprintf(stderr, "lind: vblank #%lu период=%lld ns\n",
@@ -1212,8 +1236,12 @@ static int pace_dispatch(void *data)
 /* Printed on demand, so a flicker report can be turned into facts. */
 static void dump_stats(void)
 {
-	fprintf(stderr, "lind: repaint=%lu frames=%lu\n", drm.n_repaint,
-		drm.n_frames);
+	fprintf(stderr,
+		"lind: repaint=%lu frames=%lu events=%lu dropped=%lu "
+		"flip_err=%lu read_err=%lu pending=%d scan=%lu vblank=%lu\n",
+		drm.n_repaint, drm.n_frames, drm.n_events, drm.n_dropped,
+		drm.n_flip_err, drm.n_read_err, drm.flip_pending,
+		n_scan_frames, n_vblank);
 }
 
 /* --- shm ----------------------------------------------------------------
@@ -2357,6 +2385,23 @@ int main(void)
 	}
 
 	/*
+	 * LIND_SCANSYNC=1 switches presentation from page flips to writing the
+	 * frame where it is displayed, one band at a time, timed against the
+	 * beam. It replaces the presentation path wholesale, so it stays behind a
+	 * switch until it has been seen on the panel.
+	 */
+	if (getenv("LIND_SCANSYNC")) {
+		scan_mode = 1;
+		if (scan_setup(loop) == 0)
+			fprintf(stderr, "lind: полосная отрисовка, %d полосы\n",
+				SCAN_BANDS);
+		else
+			scan_mode = 0;
+	}
+
+	vblank_request();
+
+	/*
 	 * Start the keep-alive chain here - after the timer exists, which is
 	 * the whole reason it was silent before. Armed one step earlier it
 	 * tested a NULL handle, did nothing, and with no client there was no
@@ -2373,6 +2418,15 @@ int main(void)
 	else
 		wl_event_loop_add_fd(loop, touch_fd, WL_EVENT_READABLE,
 				     read_touch, NULL);
+
+	/*
+	 * Pick a drawing target before anything paints. Every drawing routine
+	 * goes through dst_map, and it is NULL until here - so the startup
+	 * fill_background() below was dereferencing NULL and the compositor
+	 * died on its first frame, with nothing in the log after the touch
+	 * device opened because the later output was still buffered.
+	 */
+	dst_select(drm.render);
 
 	fill_background();
 	printf("lind: слушаю Wayland на %s; Ctrl-C или 'lindroid back' "
