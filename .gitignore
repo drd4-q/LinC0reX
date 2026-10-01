@@ -11,3 +11,7 @@ tools/lindroid-ctl
 tools/test-control
 drivers/lindroid-drm/tools/lindroid-ctl
 drivers/lindroid-drm/tools/test-control
+
+# python bytecode from importing fetchdeb
+__pycache__/
+*.pyc
