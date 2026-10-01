@@ -214,20 +214,92 @@ release_panel() {
 
 # Composer first, SurfaceFlinger second. The other order leaves SurfaceFlinger
 # starting against a display nothing owns.
+# Take the chroot mounts back off, deepest first.
+#
+# Leaving them was not harmless. An rbind of /dev brings every submount with it,
+# which on Android includes the cgroup v1 hierarchies - /dev/blkio, /dev/cpuctl,
+# /dev/cpuset - and those stayed mounted into the chroot after the compositor was
+# gone: 22 mounts, ours, with nothing using them.
+#
+# Lazy, because the phone reboots constantly and a busy mount should not be able
+# to hold the handback open. setup_env puts them back on the next run.
+# Take down only what we created ourselves.
+#
+# This was 22 mounts and it broke the phone. An rbind of /dev carries every
+# submount with it, which on Android includes the cgroup v1 hierarchies, and
+# those live in a shared peer group: umounting the copy inside the chroot sent
+# an unmount message to the peer and took Android's own /dev/cpuctl, /dev/blkio
+# and /dev/cpuset with it. init then could not get a process context and refused
+# to start surfaceflinger at all, so the phone had no display until a reboot.
+#
+# So: only $ROOTFS/proc, which is a fresh proc mount belonging to us and to
+# nothing else. /dev and /sys are left alone - they have been mounted for the
+# whole project without harm, they are re-created by setup_env anyway, and the
+# upside of removing them is far smaller than the downside of getting it wrong.
+#
+# A guard on top: never unmount a cgroup, whatever the path.
+unmount_env() {
+	local m left type
+
+	for m in "$ROOTFS/proc"; do
+		if mount 2>/dev/null | grep -q " $m "; then
+			umount -l "$m" </dev/null 2>/dev/null
+		fi
+	done
+
+	# Belt and braces: report anything we did not expect, rather than act.
+	left=$(mount 2>/dev/null | awk '{print $3}' |
+	       grep "^$ROOTFS/dev/\|^$ROOTFS/sys/" | wc -l)
+	if [ "$left" -gt 0 ]; then
+		say "chroot/proc размонтирован; /dev и /sys оставлены (несут общие монтирования Android)"
+		:
+	fi
+
+	for m in $(mount 2>/dev/null | awk '{print $3}' | grep "^$ROOTFS"); do
+		type=$(mount 2>/dev/null | grep " $m " | awk '{print $5}')
+		if [ "$type" = cgroup ]; then
+			warn "НЕ трогаю cgroup-монтирование: $m"
+		fi
+	done
+}
+
 restore_panel() {
 	say "stopping Linux from the display"
-	pkill kmsclaim 2>/dev/null
-	pkill weston 2>/dev/null
-	pkill weston-terminal 2>/dev/null
-	pkill lind 2>/dev/null
-	pkill lindtest 2>/dev/null
+	# -x, exact name. Without it "pkill lind" also matches lindroid - this
+	# script - and the handback killed itself on its first line. That is why
+	# back had been stopping right after its first message: the chroot stayed
+	# mounted and Android was never properly restarted, which is very
+	# likely what left touch dead on the phone afterwards.
+	pkill -x kmsclaim 2>/dev/null
+	pkill -x weston 2>/dev/null
+	pkill -x weston-terminal 2>/dev/null
+	pkill -x lindtest 2>/dev/null
+	pkill -x lind 2>/dev/null
 	sleep 1
+
+	# The compositor must be gone before the panel is handed back, or the
+	# first SetCrtc loses the race with it and reads as a driver fault.
+	unmount_env
 
 	say "restarting the display owners"
 	setprop ctl.start "$COMPOSER" 2>/dev/null
 	sleep 1
 	setprop ctl.start "$SF" 2>/dev/null
 	sleep 2
+
+	local sf
+	sf=$(getprop init.svc."$SF")
+	if [ "$sf" = running ]; then
+		cat <<-'NOTE'
+		ВНИМАНИЕ: тач на Android после возврата может не заработать сразу.
+		Он не завис - устройство держит system_server, это проверено.
+		Но конвейер вводаAndroid переживает остановку SurfaceFlinger не
+		всегда, и восстанавливается перезагрузкой: lindroid reboot.
+		Если тач заработал сам - всё в порядке, сообщать не нужно.
+		NOTE
+	else
+		warn "$SF не поднялся: $sf"
+	fi
 }
 
 status() {
@@ -528,6 +600,15 @@ cmd_back() {
 	status
 }
 
+# Android's input pipeline does not always come back from losing
+# SurfaceFlinger. This is the reliable way out, and it is offered rather than
+# done on its own: rebooting a phone unasked is not ours to decide.
+cmd_reboot() {
+	say "перезагружаю телефон"
+	sync
+	reboot
+}
+
 cmd_status() {
 	setup_env
 	status
@@ -546,6 +627,7 @@ home)    cmd_home ;;
 scansync) shift; cmd_scansync "$@" ;;
 client)  shift; cmd_client "$@" ;;
 back)    cmd_back ;;
+reboot)  cmd_reboot ;;
 status)  cmd_status ;;
 -h|--help|help)
 	sed -n '4,24p' "$0" | sed 's/^# \?//'
