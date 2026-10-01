@@ -58,9 +58,24 @@
  * libdrm's public headers, but the kernel writes exactly these bytes to the
  * DRM fd. Layout is from the kernel UAPI and has been stable for many years.
  */
-#ifndef DRM_EVENT_PAGE_FLIP_DONE
-#define DRM_EVENT_PAGE_FLIP_DONE 0x04
-#endif
+/*
+ * A page flip completion, under either name.
+ *
+ * This kernel generation sends 0x02, DRM_EVENT_FLIP_COMPLETE - see
+ * drm_atomic_uapi.c:906, where drm_mode_page_flip() stamps the event it is
+ * about to queue. Newer kernels renamed it DRM_EVENT_PAGE_FLIP_DONE and moved
+ * it to 0x04.
+ *
+ * Matching on 0x04 alone is silently wrong: the completion arrives, is
+ * discarded as an unrecognised type, the pending flip is never cleared, and the
+ * compositor then never issues a second flip. It presents one frame and looks
+ * exactly like a driver that never completes a flip. That misreading is what
+ * sent this looking for a kernel bug that was not there.
+ */
+static int is_flip_done(uint32_t type)
+{
+	return type == DRM_EVENT_FLIP_COMPLETE || type == 0x04;
+}
 struct drm_event_compat {
 	int type;
 	int length;
@@ -329,7 +344,7 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 		fprintf(stderr, "lind: drm event type=%d seq=%llu\n",
 			ev.base.type, (unsigned long long)ev.sequence);
 
-	if (ev.base.type != DRM_EVENT_PAGE_FLIP_DONE)
+	if (!is_flip_done(ev.base.type))
 		return 0;
 
 	s = flip_surface;
