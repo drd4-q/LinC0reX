@@ -22,6 +22,7 @@
 #   lindroid flower       weston + a client that needs no fonts
 #   lindroid lind         lind, our own compositor, on the proven path
 #   lindroid demo [secs]  lind plus a client, one command, for a fresh boot
+#   lindroid home         just the desktop: lind alone, so the home screen shows
 #   lindroid scansync [s] same, but the frame is written band by band in step
 #                         with the scan beam instead of being page flipped
 #   lindroid client <c>   run one Wayland client against a running weston
@@ -458,6 +459,20 @@ cmd_lind() {
 	say "клиент: $BINDIR/lindroid client ..."
 }
 
+# The desktop on its own: no client, so the compositor draws its home screen.
+# Demo starts a client as well, which covers the home screen - deliberately, so
+# that this is the way to see it.
+cmd_home() {
+	setup_env
+	release_panel || exit 1
+	wait_card_free || exit 1
+	start_lind || exit 1
+	say "домашний экран, окно приложения не запущено"
+	say "тап по плитке запускает приложение из \$ROOTFS/usr/share/lindroid/apps"
+	say "лог: $MOUNTPOINT/lind.log"
+	say "вернуть: $BINDIR/lindroid back"
+}
+
 # The banded-presentation run: same demo, but lind writes the frame where it is
 # shown, one band at a time, timed against the beam, instead of page flipping.
 cmd_scansync() {
@@ -527,6 +542,7 @@ terminal) cmd_terminal ;;
 flower)  cmd_flower ;;
 lind)    cmd_lind ;;
 demo)    shift; cmd_demo "$@" ;;
+home)    cmd_home ;;
 scansync) shift; cmd_scansync "$@" ;;
 client)  shift; cmd_client "$@" ;;
 back)    cmd_back ;;
