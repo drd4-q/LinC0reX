@@ -828,8 +828,20 @@ static void xdg_surface_get_toplevel(struct wl_client *c, struct wl_resource *r,
 	 * earliest point it can be sent. Doing it here rather than at commit
 	 * time is not a detail: by commit the buffer is already applied.
 	 */
-	xdg_surface_send_configure(s->xdg_surface, 1);
-	xdg_toplevel_send_configure(s->xdg_toplevel, 0, 0, 0);
+	/*
+	 * xdg_toplevel.configure carries a states array. Passing NULL is
+	 * rejected by libwayland - "null value passed for arg 2" - and the
+	 * client is dropped, which looks exactly like a compositor that maps
+	 * nothing. An empty array is the correct way to say "no state
+	 * changes", which is true here: the toplevel is given the whole panel.
+	 */
+	{
+		struct wl_array states;
+
+		wl_array_init(&states);
+		xdg_toplevel_send_configure(s->xdg_toplevel, 0, 0, &states);
+		wl_array_release(&states);
+	}
 }
 
 static void xdg_surface_get_popup(struct wl_client *c, struct wl_resource *r,
