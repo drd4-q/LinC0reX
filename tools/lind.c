@@ -40,6 +40,8 @@
 #include <time.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -135,6 +137,225 @@ static struct {
 	unsigned long n_repaint, n_frames, n_commits;
 	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
 } drm;
+
+/* Text and the panel are defined in the other order below; the panel needs both. */
+static int text_init(int px);
+static int text_width(const char *s, int px);
+static void draw_text(int x, int y, int px, uint32_t colour, const char *s);
+static char focus_title[64];
+
+/* --- panel ----------------------------------------------------------------
+ *
+ * The compositor draws this rather than a shell client does. That is a
+ * deliberate first step and not a shortcut towards the real thing: it needs no
+ * xdg_popup and no text protocol, so the desktop exists while those are still
+ * missing, and the clock and battery are always on screen regardless of what
+ * any client does.
+ */
+
+#define PANEL_H 76
+#define BATT_PATH "/sys/class/power_supply/sm5602_bat/"
+
+static int sysfs_int(const char *path)
+{
+	char buf[32];
+	ssize_t n;
+	int fd = open(path, O_RDONLY);
+	int v = -1;
+
+	if (fd < 0)
+		return -1;
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n > 0) {
+		buf[n] = 0;
+		v = atoi(buf);
+	}
+	return v;
+}
+
+/* Plain rectangle fill, clipped. Everything on the panel goes through this. */
+static void fill_rect(int x0, int y0, int w, int h, uint32_t colour)
+{
+	int y, x;
+
+	for (y = y0; y < y0 + h; y++) {
+		uint32_t *row;
+
+		if (y < 0 || y >= (int)drm.h)
+			continue;
+		row = drm.map[drm.render] + (size_t)y * drm.stride[drm.render] / 4;
+		for (x = x0; x < x0 + w; x++)
+			if (x >= 0 && x < (int)drm.w)
+				row[x] = colour;
+	}
+}
+
+static void draw_panel(void)
+{
+	char text[24];
+	time_t now;
+	struct tm tm;
+	int cap, x, bx = 28;
+
+	/* Bar, with a hairline so it reads as separate from the wallpaper
+	 * even where the two are the same shade. */
+	fill_rect(0, 0, (int)drm.w, PANEL_H, 0xFF16171B);
+	fill_rect(0, PANEL_H - 2, (int)drm.w, 2, 0xFF2E3038);
+
+	now = time(NULL);
+	localtime_r(&now, &tm);
+	snprintf(text, sizeof(text), "%02d:%02d", tm.tm_hour, tm.tm_min);
+	x = (int)drm.w - 28 - text_width(text, 36);
+	draw_text(x, 20, 36, 0xFFF2F3F5, text);
+
+	/* Battery: a pill with a level, and the percentage beside it. A pill
+	 * alone is a bar nobody can read a number off. */
+	cap = sysfs_int(BATT_PATH "capacity");
+	if (cap >= 0) {
+		int bw = 46, bh = 22, bx = 28, by = (PANEL_H - bh) / 2 - 4;
+		int fillw = bw * (cap > 100 ? 100 : cap) / 100;
+
+		fill_rect(bx, by, bw, bh, 0xFF2E3038);
+		fill_rect(bx + 3, by + 3, bw - 6, bh - 6, 0xFF16171B);
+		fill_rect(bx + 3, by + 3, (bw - 6) * fillw / (bw - 6),
+			  bh - 6, cap <= 15 ? 0xFFE05A4E : 0xFF5AC47A);
+		fill_rect(bx + bw + 2, by + bh / 3, 4, bh - 2 * (bh / 3),
+			  0xFF2E3038);
+
+		snprintf(text, sizeof(text), "%d%%", cap);
+		draw_text(bx + bw + 14, by + 2, 24, 0xFFC9CBD2, text);
+	}
+
+	/* Name of whatever has focus, so there is always a hint of what is
+	 * on screen. */
+	if (focus_title && focus_title[0]) {
+		x = bx + 150;
+		if (cap < 0)
+			x = 28;
+		draw_text(x, 26, 26, 0xFF9AA0AC, focus_title);
+	}
+}
+
+/* --- text ----------------------------------------------------------------
+ *
+ * FreeType over DejaVuSans, rasterised on demand and blended straight into the
+ * scanout buffer.
+ *
+ * Hand-authoring a bitmap font was the alternative and it is what the rest of
+ * this tree avoids - no pango, no fontconfig, no Xft, which the chroot has no
+ * use for. DejaVuSans.ttf is already installed here (weston's dependencies
+ * pulled it in), so the only missing piece was the rasteriser, and
+ * libfreetype6 is sixteen packages. A desktop whose clock cannot be spelled is
+ * not a desktop.
+ */
+static FT_Library ft_lib;
+static FT_Face ft_face;
+static int ft_ready;
+
+static int text_init(int px)
+{
+	static const char *paths[] = {
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+	};
+	size_t i;
+
+	if (FT_Init_FreeType(&ft_lib)) {
+		fprintf(stderr, "lind: FreeType не инициализировался\n");
+		return -1;
+	}
+
+	for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+		if (FT_New_Face(ft_lib, paths[i], 0, &ft_face) == 0) {
+			FT_Set_Pixel_Sizes(ft_face, 0, px);
+			ft_ready = 1;
+			return 0;
+		}
+	}
+
+	fprintf(stderr, "lind: нет шрифта DejaVu\n");
+	FT_Done_FreeType(ft_lib);
+	return -1;
+}
+
+static int text_width(const char *s, int px)
+{
+	int w = 0;
+
+	if (!ft_ready || FT_Set_Pixel_Sizes(ft_face, 0, px))
+		return 0;
+	while (*s) {
+		if (FT_Load_Char(ft_face, (unsigned char)*s,
+				 FT_LOAD_RENDER) == 0)
+			w += (ft_face->glyph->advance.x + 31) >> 6;
+		s++;
+	}
+	return w;
+}
+
+/* y is the top of the line, not the baseline, so callers do not each have to
+ * know the face's ascent. */
+static void draw_text(int x, int y, int px, uint32_t colour, const char *s)
+{
+	int sr = (colour >> 16) & 0xFF, sg = (colour >> 8) & 0xFF;
+	int sb = colour & 0xFF, sa = (colour >> 24) & 0xFF;
+	int baseline;
+
+	if (!ft_ready || FT_Set_Pixel_Sizes(ft_face, 0, px))
+		return;
+	baseline = y + (int)(ft_face->size->metrics.ascender / 64);
+
+	while (*s) {
+		FT_GlyphSlot g;
+		int gy, top, advance;
+		const unsigned char *row;
+		int rowbytes;
+
+		if (FT_Load_Char(ft_face, (unsigned char)*s, FT_LOAD_RENDER))
+			break;
+		g = ft_face->glyph;
+		top = baseline - g->bitmap_top;
+		rowbytes = (int)((g->bitmap.width + 3) & ~3);
+
+		for (gy = 0; gy < (int)g->bitmap.rows; gy++) {
+			int gx;
+			uint32_t *dst;
+			int dy = top + gy;
+
+			if (dy < 0 || dy >= (int)drm.h)
+				continue;
+			dst = drm.map[drm.render] +
+			      (size_t)dy * drm.stride[drm.render] / 4;
+			row = g->bitmap.buffer + (size_t)gy * rowbytes;
+			for (gx = 0; gx < (int)g->bitmap.width; gx++) {
+				int cov = row[gx], px2 = x + gx;
+				int a;
+
+				if (!cov || px2 < 0 || px2 >= (int)drm.w)
+					continue;
+				/* Text is drawn onto whatever the window
+				 * left, so it is blended, not pasted. */
+				a = cov * sa / 255;
+				if (!a)
+					continue;
+				dst[px2] = (a << 24) |
+					   (((sr * a + (dst[px2] >> 16 & 0xFF) *
+					      (255 - a)) / 255) << 16) |
+					   (((sg * a + (dst[px2] >> 8 & 0xFF) *
+					      (255 - a)) / 255) << 8) |
+					   (((sb * a + (dst[px2] & 0xFF) *
+					      (255 - a)) / 255));
+			}
+		}
+
+		advance = (g->advance.x + 31) >> 6;
+		if (advance <= 0)
+			advance = 1;
+		x += advance;
+		s++;
+	}
+}
 
 /* --- backlight -----------------------------------------------------------
  *
@@ -477,6 +698,7 @@ static void repaint(struct surface *dirty)
 	}
 
 	brightness_flush();
+	draw_panel();
 	draw_osd();
 
 	drm.n_repaint++;
@@ -1260,8 +1482,12 @@ static void toplevel_set_title(struct wl_client *c, struct wl_resource *r,
 			       const char *title)
 {
 	(void)c;
-	if (title)
+	if (title) {
 		printf("lind: окно \"%s\"\n", title);
+		/* Shown on the panel, so the top bar says what is on screen
+		 * without a separate shell client. */
+		snprintf(focus_title, sizeof(focus_title), "%s", title);
+	}
 }
 
 static void toplevel_set_app_id(struct wl_client *c, struct wl_resource *r,
@@ -1773,6 +1999,8 @@ int main(void)
 	 * so nothing else ever arms the timer and the panel is never fed
 	 * again. */
 	arm_keepalive();
+
+	text_init(20);
 
 	/* Android's SurfaceFlinger normally owns this. Once we take the
 	 * display the panel keeps whatever level it last had, 315 of 2047
