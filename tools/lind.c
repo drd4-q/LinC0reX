@@ -97,25 +97,27 @@ static struct {
 	uint64_t size;
 	uint32_t *map[FB_COUNT];
 	int mode_set;
+
 	/*
-	 * Double buffered. Rendering into the buffer the panel is scanning
-	 * out tears the frame: part of the screen shows the new frame and part
-	 * the old, which on this panel reads as violent flickering.
+	 * Double buffered. Rendering into the buffer the panel is scanning out
+	 * tears the frame: part of the screen shows the new frame and part the
+	 * old, which from the front reads as flickering.
 	 *
 	 * render is the buffer being drawn into, scanout the one the panel is
-	 * reading. A page flip swaps them atomically at the next vblank.
-	 */
-	/*
-	 * One buffer, drawn in place. Page flip looked like the answer to the
-	 * tearing, and it is not available: the request is accepted and the
-	 * completion event never arrives, so a second buffer plus a flip means
-	 * exactly one frame is ever shown. Measured: flip_ok=1, dropped=3187.
+	 * reading. A page flip swaps them atomically, so the tear is gone.
 	 *
-	 * Writing the scanned-out buffer in place is what panelloop did, at
-	 * 82 fps, with a clean moving image - so that is what this does.
+	 * This is only usable because of a driver fix. The completion event
+	 * never arrived before it - the request was accepted and PAGE_FLIP_DONE
+	 * never came back, measured as one event in 3136 requests - which
+	 * stranded a double buffered compositor on its first frame, and was also
+	 * why weston froze. See docs/page-flip-root-cause.md.
 	 */
-	unsigned long n_repaint, n_frames, n_commits;
+	int render, scanout;
+	int flip_pending;
 	struct drm_mode_page_flip_event flip_event;
+
+	unsigned long n_repaint, n_frames, n_commits;
+	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
 } drm;
 
 /* --- state -------------------------------------------------------------- */
@@ -180,6 +182,7 @@ static struct wl_list pointers;
  * So the pacing is done with a timer at the panel's refresh period instead.
  */
 static struct surface *pending_surface;
+static struct surface *flip_surface;
 static struct wl_event_source *pace_timer;
 static int pace_armed;
 /* The panel runs at 120 Hz. */
@@ -215,10 +218,10 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 
 		if (dy < 0 || dy >= (int)drm.h)
 			continue;
-		memcpy((char *)drm.map[0] + (size_t)dy * drm.stride[0] + ox * 4,
+		memcpy((char *)drm.map[drm.render] + (size_t)dy * drm.stride[drm.render] + ox * 4,
 		       (char *)src + (size_t)y * src_stride,
-		       (size_t)w * 4 > (size_t)drm.stride[0] - (size_t)ox * 4
-			? (size_t)drm.stride[0] - (size_t)ox * 4
+		       (size_t)w * 4 > (size_t)drm.stride[drm.render] - (size_t)ox * 4
+			? (size_t)drm.stride[drm.render] - (size_t)ox * 4
 			: (size_t)w * 4);
 	}
 }
@@ -226,11 +229,11 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 static void fill_background(void)
 {
 	int y;
-	uint32_t *row = drm.map[0];
+	uint32_t *row = drm.map[drm.render];
 	uint32_t grey = 0xFF181818;
 
 	for (y = 0; y < (int)drm.h; y++) {
-		uint32_t *p = row + (size_t)y * drm.stride[0] / 4;
+		uint32_t *p = row + (size_t)y * drm.stride[drm.render] / 4;
 		int x;
 
 		/* A visible gradient, so a frozen frame is obvious rather
@@ -273,10 +276,73 @@ static void repaint(struct surface *dirty)
 	}
 
 	drm.n_repaint++;
-	if (dirty) {
-		drm.n_frames++;
-		send_frame_callbacks(dirty);
+
+	/*
+	 * Draw is done into the buffer the panel is not reading. Publishing
+	 * it is a separate step: the flip is what makes it visible, and the
+	 * client is not told the frame is done until the flip completes.
+	 *
+	 * If the previous flip has not landed yet, skip rather than draw over
+	 * the buffer now on screen. The frame callback has not been sent, so
+	 * the client simply waits, which is the back-pressure a
+	 * double-buffered compositor gets for free.
+	 */
+	if (drm.flip_pending) {
+		drm.n_dropped++;
+		return;
 	}
+
+	if (drmModePageFlip(drm.fd, drm.crtc_id, drm.fb[drm.render],
+			   DRM_MODE_PAGE_FLIP_EVENT,
+			   &drm.flip_event) != 0) {
+		drm.n_flip_err++;
+		return;
+	}
+
+	drm.flip_pending = 1;
+	flip_surface = dirty;
+}
+
+/*
+ * The DRM fd is readable when a flip completes. The event type is logged for
+ * the first few: "no event" and "an event of some other type" look identical
+ * from a frame counter, and that ambiguity cost real time once already.
+ */
+static int on_drm_event(int fd, uint32_t mask, void *data)
+{
+	struct drm_mode_page_flip_event ev;
+	struct surface *s;
+	int n;
+
+	(void)mask;
+	(void)data;
+
+	n = read(fd, &ev, sizeof(ev));
+	if (n <= 0) {
+		if (n < 0 && errno != EAGAIN)
+			drm.n_read_err++;
+		return 0;
+	}
+
+	drm.n_events++;
+	if (drm.n_events <= 8)
+		fprintf(stderr, "lind: drm event type=%d seq=%llu\n",
+			ev.base.type, (unsigned long long)ev.sequence);
+
+	if (ev.base.type != DRM_EVENT_PAGE_FLIP_DONE)
+		return 0;
+
+	s = flip_surface;
+	flip_surface = NULL;
+	drm.scanout = drm.render;
+	drm.render = 1 - drm.render;
+	drm.flip_pending = 0;
+	drm.n_frames++;
+
+	if (s)
+		send_frame_callbacks(s);
+
+	return 0;
 }
 
 /* Repaint, then release the client waiting on this frame. */
@@ -288,8 +354,9 @@ static int pace_dispatch(void *data)
 	pending_surface = NULL;
 	pace_armed = 0;
 
-	/* repaint() sends the frame callbacks; doing it here as well would
-	 * release the same callbacks twice. */
+	/* The frame callbacks go out in on_drm_event(), when the flip this
+	 * requests has actually landed. Sending them here would tell the
+	 * client the frame is on screen before it is. */
 	if (s)
 		repaint(s);
 
@@ -1205,6 +1272,9 @@ static int drm_setup(void)
 		}
 	}
 
+	drm.render = 0;
+	drm.scanout = 0;
+
 	if (drmModeSetCrtc(drm.fd, drm.crtc_id, drm.fb[0], 0, 0,
 			   &drm.conn_id, 1, &conn->modes[0]) < 0) {
 		fprintf(stderr, "lind: SetCrtc: %s\n", strerror(errno));
@@ -1309,6 +1379,9 @@ int main(void)
 	loop = wl_display_get_event_loop(display);
 
 
+
+	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
+			     NULL);
 
 	pace_timer = wl_event_loop_add_timer(loop, pace_dispatch, NULL);
 	if (!pace_timer) {
