@@ -20,6 +20,7 @@
 #   lindroid weston       weston on the panel
 #   lindroid terminal     weston + weston-terminal
 #   lindroid flower       weston + a client that needs no fonts
+#   lindroid lind         lind, our own compositor, on the proven path
 #   lindroid client <c>   run one Wayland client against a running weston
 #   lindroid back         give the panel back to Android
 #   lindroid run <cmd>    run one command in the chroot
@@ -214,6 +215,8 @@ restore_panel() {
 	pkill kmsclaim 2>/dev/null
 	pkill weston 2>/dev/null
 	pkill weston-terminal 2>/dev/null
+	pkill lind 2>/dev/null
+	pkill lindtest 2>/dev/null
 	sleep 1
 
 	say "restarting the display owners"
@@ -389,6 +392,19 @@ cmd_terminal() {
 	run_client weston-terminal term-run
 }
 
+cmd_lind() {
+	setup_env
+	release_panel || exit 1
+	say "запускаю lind (свой композитор)"
+	[ -x "$ROOTFS/usr/bin/lind" ] || die "lind не установлен"
+	setsid chroot "$ROOTFS" /usr/bin/lind \
+		> "$MOUNTPOINT/lind.log" 2>&1 < /dev/null &
+	sleep 4
+	tail -3 "$MOUNTPOINT/lind.log" 2>/dev/null | sed 's/^/  /'
+	say "сокет: $ROOTFS/run/user/0/wayland-0"
+	say "лог: $MOUNTPOINT/lind.log"
+}
+
 cmd_flower() {
 	setup_env
 	release_panel || exit 1
@@ -420,6 +436,7 @@ test)    cmd_test ;;
 weston)  cmd_weston ;;
 terminal) cmd_terminal ;;
 flower)  cmd_flower ;;
+lind)    cmd_lind ;;
 client)  shift; cmd_client "$@" ;;
 back)    cmd_back ;;
 status)  cmd_status ;;
