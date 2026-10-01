@@ -979,8 +979,15 @@ static void send_pointer(uint32_t type, uint32_t button, uint32_t state)
 	struct pointer *p, *tmp;
 
 	wl_list_for_each_safe(p, tmp, &pointers, link) {
+		/*
+		 * wl_pointer_send_motion takes wl_fixed_t, which is 24.8
+		 * fixed point. Passing display pixels as if they were plain
+		 * integers divides every coordinate by 256: a touch at
+		 * (540,1200) arrived as (2,4).
+		 */
 		wl_pointer_send_motion(p->resource, ++serial_counter,
-				       last_x, last_y);
+				       wl_fixed_from_int((int)last_x),
+				       wl_fixed_from_int((int)last_y));
 		if (type == WL_POINTER_BUTTON)
 			wl_pointer_send_button(p->resource, serial_counter,
 					      button, state, WL_POINTER_AXIS_SOURCE_FINGER);
@@ -1126,6 +1133,15 @@ static int read_touch(int fd, uint32_t mask, void *data)
 					swipe_bright0 = bl_level;
 					swipe_moved = 0;
 					send_pointer(WL_POINTER_MOTION, 0, 0);
+					/* Press as well as motion. Sending
+					 * the button only on release meant
+					 * the client saw "отпускание"
+					 * and never a press, so a tap
+					 * looked like it had started
+					 * nowhere. */
+					send_pointer(WL_POINTER_BUTTON,
+						     BTN_LEFT,
+						     WL_POINTER_BUTTON_STATE_PRESSED);
 					touch_active = 1;
 				} else if (ts.touching) {
 					send_pointer(WL_POINTER_MOTION, 0, 0);

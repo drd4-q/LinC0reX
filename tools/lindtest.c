@@ -104,11 +104,27 @@ static const struct wl_seat_listener seat_impl = {
 	.name = seat_name,
 };
 
+/*
+ * Touch is now correct end to end: multi-touch protocol B codes, panel range
+ * scaled from 10800x24000 to display pixels, and state that survives between
+ * event batches. Before that the compositor sent (0,0) and nothing here could
+ * tell the difference between a working pointer and a dead one.
+ *
+ * So the test now draws where the finger is. A pointer that moves but leaves no
+ * trace is indistinguishable from one that is not delivered, which is exactly
+ * the ambiguity that hid the earlier faults.
+ */
+static int touch_x = -1, touch_y = -1;
+static int touch_active, touch_seen;
+static unsigned long touch_presses;
+
 static void pointer_enter(void *d, struct wl_pointer *p, uint32_t serial,
 			  struct wl_surface *s, wl_fixed_t x, wl_fixed_t y)
 {
-	(void)d; (void)p; (void)s; (void)x; (void)y;
-	(void)serial;
+	(void)d; (void)p; (void)s; (void)serial;
+	touch_x = wl_fixed_to_int(x);
+	touch_y = wl_fixed_to_int(y);
+	touch_seen = 1;
 }
 
 static void pointer_leave(void *d, struct wl_pointer *p, uint32_t serial,
@@ -120,15 +136,24 @@ static void pointer_leave(void *d, struct wl_pointer *p, uint32_t serial,
 static void pointer_motion(void *d, struct wl_pointer *p, uint32_t serial,
 			   wl_fixed_t x, wl_fixed_t y)
 {
-	(void)d; (void)p; (void)x; (void)y;
-	(void)serial;
+	(void)d; (void)p; (void)serial;
+	touch_x = wl_fixed_to_int(x);
+	touch_y = wl_fixed_to_int(y);
+	touch_seen = 1;
 }
 
 static void pointer_button(void *d, struct wl_pointer *p, uint32_t serial,
 			   uint32_t time, uint32_t button, uint32_t state)
 {
 	(void)d; (void)p; (void)serial; (void)time; (void)button;
-	printf("нажатие: %s\n", state ? "отпускание" : "нажата");
+
+	/* state is the button state: 0 pressed, 1 released. */
+	touch_active = !state;
+	touch_seen = 1;
+	if (!state)
+		touch_presses++;
+	printf("нажатие в (%d,%d): %s, всего %lu\n", touch_x, touch_y,
+	       state ? "отпускание" : "нажата", touch_presses);
 }
 
 static void pointer_axis(void *d, struct wl_pointer *p, uint32_t time,
@@ -348,6 +373,34 @@ static void draw(struct wl_surface *surface, struct wl_buffer *buffer,
 
 	/* Blue bar: travels right, scaled to width. */
 	fill_rect(pixels, stride, xpos - 20, 200, 40, 40, 0xFF0000FF);
+
+	/*
+	 * Where the finger is: a filled disc while held, a ring after
+	 * release, so a tap leaves a mark that fades rather than vanishing.
+	 */
+	if (touch_seen) {
+		int r = 60, inner = (r - 12) * (r - 12);
+
+		for (y = touch_y - r; y <= touch_y + r; y++) {
+			uint32_t *trow;
+
+			if (y < 0 || y >= height)
+				continue;
+			trow = (uint32_t *)((char *)pixels + (size_t)y * stride);
+			for (x = touch_x - r; x <= touch_x + r; x++) {
+				int dx = x - touch_x, dy = y - touch_y;
+				int d2 = dx * dx + dy * dy;
+
+				if (x < 0 || x >= width || d2 > r * r)
+					continue;
+				if (d2 > inner)
+					trow[x] = 0xFFFFFFFF;
+				else
+					trow[x] = touch_active ? 0xFF60FF60
+							       : 0xFF707070;
+			}
+		}
+	}
 
 	wl_surface_attach(surface, buffer, 0, 0);
 	wl_surface_damage(surface, 0, 0, width, height);
