@@ -22,6 +22,8 @@
 #   lindroid flower       weston + a client that needs no fonts
 #   lindroid lind         lind, our own compositor, on the proven path
 #   lindroid demo [secs]  lind plus a client, one command, for a fresh boot
+#   lindroid scansync [s] same, but the frame is written band by band in step
+#                         with the scan beam instead of being page flipped
 #   lindroid client <c>   run one Wayland client against a running weston
 #   lindroid back         give the panel back to Android
 #   lindroid run <cmd>    run one command in the chroot
@@ -408,11 +410,28 @@ wait_card_free() {
 	return 1
 }
 
+# Extra environment for lind, exported inside the chroot. chroot does not carry
+# the caller's environment, so setting LIND_SCANSYNC outside would do nothing:
+# the compositor has to be launched through a runner script to see it.
+LIND_ENV=""
+
 start_lind() {
 	[ -x "$ROOTFS/usr/bin/lind" ] || die "lind не установлен в chroot"
 	rm -f "$ROOTFS"/run/user/0/wayland-* 2>/dev/null
 	say "запускаю lind"
-	setsid chroot "$ROOTFS" /usr/bin/lind \
+
+	mkdir -p "$ROOTFS/usr/bin"
+	cat > "$ROOTFS/usr/bin/lind-launch" <<EOF
+#!/bin/sh
+export PATH=/usr/bin:/bin
+export XDG_RUNTIME_DIR=/run/user/0
+export WAYLAND_DISPLAY=wayland-0
+$LIND_ENV
+exec /usr/bin/lind
+EOF
+	chmod 755 "$ROOTFS/usr/bin/lind-launch"
+
+	setsid chroot "$ROOTFS" /usr/bin/lind-launch \
 		> "$MOUNTPOINT/lind.log" 2>&1 < /dev/null &
 
 	local i=0
@@ -437,6 +456,13 @@ cmd_lind() {
 	say "lind слушает $ROOTFS/run/user/0/wayland-0"
 	say "лог: $MOUNTPOINT/lind.log"
 	say "клиент: $BINDIR/lindroid client ..."
+}
+
+# The banded-presentation run: same demo, but lind writes the frame where it is
+# shown, one band at a time, timed against the beam, instead of page flipping.
+cmd_scansync() {
+	LIND_ENV="export LIND_SCANSYNC=1"
+	cmd_demo "$@"
 }
 
 # Everything in one command, because the phone reboots often enough that
@@ -501,6 +527,7 @@ terminal) cmd_terminal ;;
 flower)  cmd_flower ;;
 lind)    cmd_lind ;;
 demo)    shift; cmd_demo "$@" ;;
+scansync) shift; cmd_scansync "$@" ;;
 client)  shift; cmd_client "$@" ;;
 back)    cmd_back ;;
 status)  cmd_status ;;
