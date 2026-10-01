@@ -52,6 +52,26 @@
 #include <drm_fourcc.h>
 #include <wayland-server.h>
 #include "xdg-shell-server-protocol.h"
+
+/*
+ * Neither struct drmEvent nor the page-flip event struct is in this
+ * libdrm's public headers, but the kernel writes exactly these bytes to the
+ * DRM fd. Layout is from the kernel UAPI and has been stable for many years.
+ */
+#ifndef DRM_EVENT_PAGE_FLIP_DONE
+#define DRM_EVENT_PAGE_FLIP_DONE 0x04
+#endif
+struct drm_event_compat {
+	int type;
+	int length;
+};
+struct drm_mode_page_flip_event {
+	struct drm_event_compat base;
+	uint64_t sequence;
+	uint64_t time;
+	uint32_t sequence_nr;
+	uint32_t reserved[4];
+};
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -77,6 +97,17 @@ static struct {
 	uint64_t size;
 	uint32_t *map[FB_COUNT];
 	int mode_set;
+	/*
+	 * Double buffered. Rendering into the buffer the panel is scanning
+	 * out tears the frame: part of the screen shows the new frame and part
+	 * the old, which on this panel reads as violent flickering.
+	 *
+	 * render is the buffer being drawn into, scanout the one the panel is
+	 * reading. A page flip swaps them atomically at the next vblank.
+	 */
+	int render, scanout;
+	int flip_pending;
+	struct drm_mode_page_flip_event flip_event;
 } drm;
 
 /* --- state -------------------------------------------------------------- */
@@ -152,7 +183,7 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 
 		if (dy < 0 || dy >= (int)drm.h)
 			continue;
-		memcpy((char *)drm.map[0] + (size_t)dy * drm.stride[0] + ox * 4,
+		memcpy((char *)drm.map[drm.render] + (size_t)dy * drm.stride[drm.render] + ox * 4,
 		       (char *)src + (size_t)y * src_stride,
 		       (size_t)w * 4 > (size_t)drm.stride[0] - (size_t)ox * 4
 			? (size_t)drm.stride[0] - (size_t)ox * 4
@@ -163,23 +194,20 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 static void fill_background(void)
 {
 	int y;
-	uint32_t *row = drm.map[0];
+	uint32_t *row = drm.map[drm.render];
 	uint32_t grey = 0xFF181818;
 
 	for (y = 0; y < (int)drm.h; y++) {
-		memset(row + (size_t)y * drm.stride[0] / 4, 0,
-		       drm.stride[0]);
-		/* A faint vertical gradient, so a frozen frame is obvious. */
-		{
-			uint32_t *p = row + (size_t)y * drm.stride[0] / 4;
-			int x;
+		uint32_t *p = row + (size_t)y * drm.stride[drm.render] / 4;
+		int x;
 
-			for (x = 0; x < (int)drm.w; x++)
-				p[x] = (grey & 0xFF000000) |
-				       (((x / 8) & 0xFF) << 16) |
-				       (((x / 8) & 0xFF) << 8) |
-				       ((x / 8) & 0xFF);
-		}
+		/* A visible gradient, so a frozen frame is obvious rather
+		 * than merely dark. */
+		for (x = 0; x < (int)drm.w; x++)
+			p[x] = (grey & 0xFF000000) |
+			       (((x / 8) & 0xFF) << 16) |
+			       (((x / 8) & 0xFF) << 8) |
+			       ((x / 8) & 0xFF);
 	}
 }
 
@@ -212,8 +240,54 @@ static void repaint(struct surface *dirty)
 			 b->width, b->height, 0, 0);
 	}
 
+	/*
+	 * Hand the finished buffer to the panel. A flip is atomic at the next
+	 * vblank, so the panel never sees a half-written frame - which is the
+	 * whole reason for two buffers. If a flip is already in flight the
+	 * other buffer is still being scanned out and drawing into it would
+	 * tear, so the frame is simply held back.
+	 */
+	if (drm.flip_pending)
+		return;
+
+	if (drmModePageFlip(drm.fd, drm.crtc_id, drm.fb[drm.render],
+			    DRM_MODE_PAGE_FLIP_EVENT, &drm.flip_event) < 0) {
+		/* Not fatal. Drawing into the scanned-out buffer looks bad
+		 * but keeps working, and this is better than a black screen. */
+		return;
+	}
+	drm.flip_pending = 1;
+
 	if (dirty)
 		send_frame_callbacks(dirty);
+}
+
+/*
+ * DRM fd readable: a page flip has completed, so the buffer the panel was
+ * reading is now free to draw into again.
+ */
+static int on_drm_event(int fd, uint32_t mask, void *data)
+{
+	struct drm_mode_page_flip_event ev;
+	int n;
+
+	(void)mask;
+	(void)data;
+
+	n = read(fd, &ev, sizeof(ev));
+	if (n < 0)
+		return 0;
+	if (n == 0)
+		return 0;
+
+	if (ev.base.type == DRM_EVENT_PAGE_FLIP_DONE) {
+		/* render becomes what was on screen, and the old scanout
+		 * buffer becomes the one we draw into next. */
+		drm.scanout = drm.render;
+		drm.render = 1 - drm.render;
+		drm.flip_pending = 0;
+	}
+	return 0;
 }
 
 /* --- shm ----------------------------------------------------------------
@@ -1077,24 +1151,27 @@ static int drm_setup(void)
 			fprintf(stderr, "lind: AddFB2: %s\n", strerror(errno));
 			goto fail;
 		}
-		drm.map[i] = NULL;
 	}
 
-	{
+	for (i = 0; i < FB_COUNT; i++) {
 		uint64_t off = 0;
 
-		if (drmModeMapDumbBuffer(drm.fd, drm.handle[0], &off) < 0) {
-			fprintf(stderr, "lind: map dumb: %s\n", strerror(errno));
+		if (drmModeMapDumbBuffer(drm.fd, drm.handle[i], &off) < 0) {
+			fprintf(stderr, "lind: map dumb %d: %s\n", i,
+				strerror(errno));
 			goto fail;
 		}
-		drm.map[0] = mmap(NULL, drm.size, PROT_READ | PROT_WRITE,
+		drm.map[i] = mmap(NULL, drm.size, PROT_READ | PROT_WRITE,
 				  MAP_SHARED, drm.fd, off);
-		if (drm.map[0] == MAP_FAILED) {
-			drm.map[0] = NULL;
-			fprintf(stderr, "lind: mmap: %s\n", strerror(errno));
+		if (drm.map[i] == MAP_FAILED) {
+			drm.map[i] = NULL;
+			fprintf(stderr, "lind: mmap %d: %s\n", i,
+				strerror(errno));
 			goto fail;
 		}
 	}
+	drm.render = 0;
+	drm.scanout = 0;
 
 	if (drmModeSetCrtc(drm.fd, drm.crtc_id, drm.fb[0], 0, 0,
 			   &drm.conn_id, 1, &conn->modes[0]) < 0) {
@@ -1199,6 +1276,12 @@ int main(void)
 	loop = wl_display_get_event_loop(display);
 
 
+
+	/* The DRM fd reports page flip completions. Without it in the loop the
+	 * flip never completes, every frame after the first is dropped as
+	 * "already pending", and the panel shows one frozen image. */
+	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
+			     NULL);
 
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
 	if (touch_fd < 0)
