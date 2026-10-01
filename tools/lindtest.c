@@ -187,32 +187,65 @@ static const struct wl_callback_listener frame_impl = {
 	.done = frame_done,
 };
 
+/*
+ * The test pattern answers three questions at once, because getting any of
+ * them wrong looks like "the compositor is not drawing":
+ *
+ *   - orientation: a white square pinned to the top left of the buffer. If it
+ *     appears elsewhere on the panel, the buffer is being rotated.
+ *   - channel order: solid red, green and blue blocks across the top. If they
+ *     come out as other hues, the format is not what we assumed.
+ *   - motion: a red bar travelling down, a blue bar travelling right, each with
+ *     its own parameter scaled to its own axis.
+ *
+ * The previous version shared one parameter between a vertical and a
+ * horizontal bar, and used it as x while scaling it to height. On a 1080x2400
+ * panel that put the "vertical" bar off-screen for the last 55% of the run,
+ * which reads as the animation stalling.
+ */
+static void fill_rect(void *pixels, int stride, int x0, int y0, int w, int h,
+		      uint32_t colour)
+{
+	int x, y;
+
+	for (y = y0; y < y0 + h; y++) {
+		uint32_t *row;
+
+		if (y < 0 || y >= height)
+			continue;
+		row = (uint32_t *)((char *)pixels + (size_t)y * stride);
+		for (x = x0; x < x0 + w; x++) {
+			if (x >= 0 && x < width)
+				row[x] = colour;
+		}
+	}
+}
+
 static void draw(struct wl_surface *surface, struct wl_buffer *buffer,
-		 void *pixels, int stride, int bar)
+		 void *pixels, int stride, int ypos, int xpos)
 {
 	int y, x;
 
-	/* Dark background, one bright bar, plus a marker at the top so a
-	 * partially updated screen is obvious. */
 	for (y = 0; y < height; y++) {
 		uint32_t *row = (uint32_t *)((char *)pixels + (size_t)y * stride);
 
 		for (x = 0; x < width; x++)
-			row[x] = 0xFF202020;
+			row[x] = 0xFF181818;
 	}
-	for (y = 0; y < height; y += 8) {
-		uint32_t *row = (uint32_t *)((char *)pixels + (size_t)y * stride);
 
-		for (x = bar - 20; x < bar + 20; x++)
-			if (x >= 0 && x < width)
-				row[x] = 0xFF00FF00;
-	}
-	for (x = 0; x < width; x += 16) {
-		uint32_t *row = (uint32_t *)((char *)pixels + bar * stride);
+	/* Orientation marker. */
+	fill_rect(pixels, stride, 0, 0, 120, 120, 0xFFFFFFFF);
 
-		if (bar < height)
-			row[x] = 0xFFFFFF00;
-	}
+	/* Channel-order probe. */
+	fill_rect(pixels, stride, 130, 0, 60, 60, 0xFFFF0000);   /* red */
+	fill_rect(pixels, stride, 200, 0, 60, 60, 0xFF00FF00);   /* green */
+	fill_rect(pixels, stride, 270, 0, 60, 60, 0xFF0000FF);   /* blue */
+
+	/* Red bar: travels down, scaled to height. */
+	fill_rect(pixels, stride, 350, ypos - 20, 40, 40, 0xFFFF0000);
+
+	/* Blue bar: travels right, scaled to width. */
+	fill_rect(pixels, stride, xpos - 20, 200, 40, 40, 0xFF0000FF);
 
 	wl_surface_attach(surface, buffer, 0, 0);
 	wl_surface_damage(surface, 0, 0, width, height);
@@ -290,7 +323,7 @@ int main(int argc, char **argv)
 
 	{
 		struct timespec start, ts;
-		int bar = 0;
+		int ypos = 0, xpos = 0, elapsed = 0;
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		while (1) {
@@ -302,22 +335,26 @@ int main(int argc, char **argv)
 			    seconds * 1000)
 				break;
 
-			bar = (int)(((ts.tv_sec - start.tv_sec) * 1000 +
-				     (ts.tv_nsec - start.tv_nsec) / 1000000) *
-				    width / (seconds * 1000));
-			if (bar < 0)
-				bar = 0;
-			if (bar >= height)
-				bar = height - 1;
+			elapsed = (int)((ts.tv_sec - start.tv_sec) * 1000 +
+					(ts.tv_nsec - start.tv_nsec) / 1000000);
+			/* Each bar scales to its own axis. Sharing one value
+			 * put the horizontal bar off-screen after 45%. */
+			ypos = elapsed * height / (seconds * 1000);
+			xpos = elapsed * width / (seconds * 1000);
+			if (ypos < 0) ypos = 0;
+			if (ypos >= height) ypos = height - 1;
+			if (xpos < 0) xpos = 0;
+			if (xpos >= width) xpos = width - 1;
 
 			cb = wl_surface_frame(surface);
 			wl_callback_add_listener(cb, &frame_impl, NULL);
-			draw(surface, buffer, pixels, stride, bar);
+			draw(surface, buffer, pixels, stride, ypos, xpos);
 
 			wl_display_roundtrip(display);
 			frames++;
 			if (frames % 10 == 0) {
-				printf("  кадр %d, полоса y=%d\n", frames, bar);
+				printf("  кадр %d, красная y=%d, синяя x=%d\n",
+				       frames, ypos, xpos);
 				fflush(stdout);
 			}
 		}
