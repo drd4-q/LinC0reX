@@ -356,13 +356,24 @@ static void draw_text(int x, int y, int px, uint32_t colour, const char *s)
 		FT_GlyphSlot g;
 		int gy, top, advance;
 		const unsigned char *row;
-		int rowbytes;
+		int pitch;
 
 		if (FT_Load_Char(ft_face, (unsigned char)*s, FT_LOAD_RENDER))
 			break;
 		g = ft_face->glyph;
 		top = baseline - g->bitmap_top;
-		rowbytes = (int)((g->bitmap.width + 3) & ~3);
+		/*
+		 * pitch, not a stride derived from width. FreeType pads
+		 * rows itself and for this face pitch == width == 19, while
+		 * rounding 19 up to a multiple of four gives 20 - so every
+		 * row after the first was read a byte late, shifting the
+		 * glyph further sideways each row until it was a diagonal
+		 * smear. It looked vaguely digit-shaped because the overall
+		 * shape was right and only the shear was wrong.
+		 */
+		pitch = (int)g->bitmap.pitch;
+		if (pitch <= 0)
+			pitch = (int)g->bitmap.width;
 
 		for (gy = 0; gy < (int)g->bitmap.rows; gy++) {
 			int gx;
@@ -373,7 +384,7 @@ static void draw_text(int x, int y, int px, uint32_t colour, const char *s)
 				continue;
 			dst = drm.map[drm.render] +
 			      (size_t)dy * drm.stride[drm.render] / 4;
-			row = g->bitmap.buffer + (size_t)gy * rowbytes;
+			row = g->bitmap.buffer + (size_t)gy * pitch;
 			for (gx = 0; gx < (int)g->bitmap.width; gx++) {
 				int cov = row[gx], px2 = x + gx;
 				int a;
