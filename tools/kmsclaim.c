@@ -41,6 +41,7 @@
 #include <drm_fourcc.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <xf86drmMode.h>
 
 #define DEV "/dev/dri/card0"
 
@@ -67,8 +68,8 @@ static void paint(uint32_t *px, int w, int h, int stride_px)
 static uint64_t *obj_props(uint32_t obj_id, uint32_t obj_type, uint32_t *count)
 {
 	struct drm_mode_obj_get_properties req;
-	uint64_t *buf;
-	uint32_t n, i;
+	uint32_t *ids = NULL, *vals = NULL, n, i;
+	uint64_t *out = NULL;
 
 	memset(&req, 0, sizeof(req));
 	req.obj_id = obj_id;
@@ -86,30 +87,39 @@ static uint64_t *obj_props(uint32_t obj_id, uint32_t obj_type, uint32_t *count)
 		return NULL;
 	}
 
-	buf = calloc(n, 2 * sizeof(*buf));
-	if (!buf)
+	/* Two separate arrays, as the kernel writes two. Sharing one buffer
+	 * and compacting in place reads ids that the previous iteration has
+	 * already overwritten, so every id after the first is garbage. */
+	ids = calloc(n, sizeof(*ids));
+	vals = calloc(n, sizeof(*vals));
+	out = calloc(n, 2 * sizeof(*out));
+	if (!ids || !vals || !out) {
+		free(ids);
+		free(vals);
+		free(out);
 		return NULL;
+	}
 
-	req.props_ptr = (uintptr_t)&buf[0];
-	req.prop_values_ptr = (uintptr_t)&buf[n];
+	req.props_ptr = (uintptr_t)ids;
+	req.prop_values_ptr = (uintptr_t)vals;
 
 	if (ioctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES, &req) < 0) {
 		fprintf(stderr, "  OBJ_GETPROPERTIES data: %s\n", strerror(errno));
-		free(buf);
+		free(ids);
+		free(vals);
+		free(out);
 		return NULL;
 	}
 
-	/* libdrm hands back the two arrays interleaved as u64s: the first
-	 * n entries are prop ids, the next n are values. */
 	for (i = 0; i < n; i++) {
-		uint32_t pid = (uint32_t)buf[i];
-
-		buf[i * 2] = pid;
-		buf[i * 2 + 1] = buf[n + i];
+		out[i * 2] = ids[i];
+		out[i * 2 + 1] = vals[i];
 	}
 
+	free(ids);
+	free(vals);
 	*count = n;
-	return buf;
+	return out;
 }
 
 /* Look up a property id by name on one object, and optionally its value. */
@@ -144,7 +154,7 @@ static int find_prop(uint32_t obj_id, uint32_t obj_type, const char *name,
 	return found;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	drmModeRes *res = NULL;
 	drmModeConnector *conn = NULL;
@@ -156,6 +166,25 @@ int main(void)
 	uint32_t w, h;
 	int i, ret = 1, committed = 0;
 	drmModeAtomicReqPtr req = NULL;
+	int force_atomic = 0;
+	int probe_vblank = 0;
+
+	/* Which commit path to exercise. weston takes the atomic one on this
+	 * driver, so if only the legacy path lights the panel, that is the
+	 * whole difference between it working and not. */
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--atomic"))
+			force_atomic = 1;
+		else if (!strcmp(argv[i], "--legacy"))
+			force_atomic = 0;
+		else if (!strcmp(argv[i], "--vblank"))
+			probe_vblank = 1;
+		else {
+			fprintf(stderr, "usage: %s [--atomic|--legacy|"
+				"--vblank]\n", argv[0]);
+			return 2;
+		}
+	}
 
 	fd = open(DEV, O_RDWR | O_CLOEXEC);
 	if (fd < 0) {
@@ -303,12 +332,15 @@ int main(void)
 
 	/* --- attempt 1: legacy --- */
 	printf("\n== legacy drmModeSetCrtc ==\n");
-	if (drmModeSetCrtc(fd, crtc_id, fb_id, 0, 0, &conn_id, 1,
-			   &conn->modes[0]) == 0) {
+	if (!force_atomic &&
+	    drmModeSetCrtc(fd, crtc_id, fb_id, 0, 0, &conn_id, 1,
+			    &conn->modes[0]) == 0) {
 		printf("*** LEGACY MODESET OK ***\n");
 		committed = 1;
-	} else {
+	} else if (!force_atomic) {
 		printf("  не сработал: %s\n", strerror(errno));
+	} else {
+		printf("  пропущен (--atomic)\n");
 	}
 
 	/* --- attempt 2: atomic --- */
@@ -318,7 +350,8 @@ int main(void)
 		uint32_t p_fb = 0, p_srcw = 0, p_srch = 0, p_crtcw = 0, p_crtch = 0;
 		uint32_t p_pl_crtc = 0;
 
-		printf("\n== atomic commit ==\n");
+		printf("\n== atomic commit ==%s ==\n",
+	       force_atomic ? " (forced)" : "");
 		if (drmModeCreatePropertyBlob(fd, &conn->modes[0],
 					      sizeof(conn->modes[0]),
 					      &blob) < 0) {
@@ -394,6 +427,43 @@ int main(void)
 		}
 		drmModeAtomicFree(req);
 		req = NULL;
+	}
+
+	/* --- vblank probe ---
+	 *
+	 * weston calls drmWaitVBlank() first thing in its repaint loop, and
+	 * only falls back to a page flip when that gives no usable timestamp.
+	 * If vblank events never arrive, every frame goes down the page-flip
+	 * path instead, and if page-flip completion does not come back either
+	 * the loop stalls after the first frame - which is what a frozen
+	 * first image looks like from the outside.
+	 */
+	if (probe_vblank) {
+		int n;
+
+		printf("\n== vblank ==\n");
+		printf("  ждём vblank на CRTC %u...\n", crtc_id);
+		fflush(stdout);
+
+		for (n = 0; n < 3; n++) {
+			drmVBlank vbl = {
+				.request.type = DRM_VBLANK_RELATIVE,
+				.request.sequence = 1,
+				.request.signal = 0,
+			};
+
+			errno = 0;
+			if (drmWaitVBlank(fd, &vbl) < 0) {
+				printf("  drmWaitVBlank #%d: ошибка %d (%s)\n",
+				       n, errno, strerror(errno));
+				continue;
+			}
+			printf("  drmWaitVBlank #%d: seq=%u usec=%lu\n",
+			       n, vbl.reply.sequence, (unsigned long)vbl.reply.tval_usec);
+			fflush(stdout);
+		}
+		printf("  если все строки выше с usec=0 или с ошибкой -\n"
+		       "  vblank-события не приходят вообще.\n");
 	}
 
 	if (committed) {
