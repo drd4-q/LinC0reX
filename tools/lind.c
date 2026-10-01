@@ -105,8 +105,16 @@ static struct {
 	 * render is the buffer being drawn into, scanout the one the panel is
 	 * reading. A page flip swaps them atomically at the next vblank.
 	 */
-	int render, scanout;
-	int flip_pending;
+	/*
+	 * One buffer, drawn in place. Page flip looked like the answer to the
+	 * tearing, and it is not available: the request is accepted and the
+	 * completion event never arrives, so a second buffer plus a flip means
+	 * exactly one frame is ever shown. Measured: flip_ok=1, dropped=3187.
+	 *
+	 * Writing the scanned-out buffer in place is what panelloop did, at
+	 * 82 fps, with a clean moving image - so that is what this does.
+	 */
+	unsigned long n_repaint, n_frames;
 	struct drm_mode_page_flip_event flip_event;
 } drm;
 
@@ -183,7 +191,7 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 
 		if (dy < 0 || dy >= (int)drm.h)
 			continue;
-		memcpy((char *)drm.map[drm.render] + (size_t)dy * drm.stride[drm.render] + ox * 4,
+		memcpy((char *)drm.map[0] + (size_t)dy * drm.stride[0] + ox * 4,
 		       (char *)src + (size_t)y * src_stride,
 		       (size_t)w * 4 > (size_t)drm.stride[0] - (size_t)ox * 4
 			? (size_t)drm.stride[0] - (size_t)ox * 4
@@ -194,11 +202,11 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 static void fill_background(void)
 {
 	int y;
-	uint32_t *row = drm.map[drm.render];
+	uint32_t *row = drm.map[0];
 	uint32_t grey = 0xFF181818;
 
 	for (y = 0; y < (int)drm.h; y++) {
-		uint32_t *p = row + (size_t)y * drm.stride[drm.render] / 4;
+		uint32_t *p = row + (size_t)y * drm.stride[0] / 4;
 		int x;
 
 		/* A visible gradient, so a frozen frame is obvious rather
@@ -240,54 +248,18 @@ static void repaint(struct surface *dirty)
 			 b->width, b->height, 0, 0);
 	}
 
-	/*
-	 * Hand the finished buffer to the panel. A flip is atomic at the next
-	 * vblank, so the panel never sees a half-written frame - which is the
-	 * whole reason for two buffers. If a flip is already in flight the
-	 * other buffer is still being scanned out and drawing into it would
-	 * tear, so the frame is simply held back.
-	 */
-	if (drm.flip_pending)
-		return;
-
-	if (drmModePageFlip(drm.fd, drm.crtc_id, drm.fb[drm.render],
-			    DRM_MODE_PAGE_FLIP_EVENT, &drm.flip_event) < 0) {
-		/* Not fatal. Drawing into the scanned-out buffer looks bad
-		 * but keeps working, and this is better than a black screen. */
-		return;
-	}
-	drm.flip_pending = 1;
-
-	if (dirty)
+	drm.n_repaint++;
+	if (dirty) {
+		drm.n_frames++;
 		send_frame_callbacks(dirty);
+	}
 }
 
-/*
- * DRM fd readable: a page flip has completed, so the buffer the panel was
- * reading is now free to draw into again.
- */
-static int on_drm_event(int fd, uint32_t mask, void *data)
+/* Printed on demand, so a flicker report can be turned into facts. */
+static void dump_stats(void)
 {
-	struct drm_mode_page_flip_event ev;
-	int n;
-
-	(void)mask;
-	(void)data;
-
-	n = read(fd, &ev, sizeof(ev));
-	if (n < 0)
-		return 0;
-	if (n == 0)
-		return 0;
-
-	if (ev.base.type == DRM_EVENT_PAGE_FLIP_DONE) {
-		/* render becomes what was on screen, and the old scanout
-		 * buffer becomes the one we draw into next. */
-		drm.scanout = drm.render;
-		drm.render = 1 - drm.render;
-		drm.flip_pending = 0;
-	}
-	return 0;
+	fprintf(stderr, "lind: repaint=%lu frames=%d\n", drm.n_repaint,
+		drm.n_frames);
 }
 
 /* --- shm ----------------------------------------------------------------
@@ -1170,8 +1142,6 @@ static int drm_setup(void)
 			goto fail;
 		}
 	}
-	drm.render = 0;
-	drm.scanout = 0;
 
 	if (drmModeSetCrtc(drm.fd, drm.crtc_id, drm.fb[0], 0, 0,
 			   &drm.conn_id, 1, &conn->modes[0]) < 0) {
@@ -1215,6 +1185,7 @@ static struct wl_display *the_display;
 
 static void on_signal(int sig)
 {
+	dump_stats();
 	(void)sig;
 	/* wl_display_run() has no way out, so the signal handler has to end
 	 * it from the inside. */
@@ -1276,12 +1247,6 @@ int main(void)
 	loop = wl_display_get_event_loop(display);
 
 
-
-	/* The DRM fd reports page flip completions. Without it in the loop the
-	 * flip never completes, every frame after the first is dropped as
-	 * "already pending", and the panel shows one frozen image. */
-	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
-			     NULL);
 
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
 	if (touch_fd < 0)
