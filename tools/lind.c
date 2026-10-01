@@ -40,9 +40,6 @@
 #include <time.h>
 #include <fcntl.h>
 #include <linux/input.h>
-#include <sys/timerfd.h>
-#include <ft2build.h>
-#include FT_FREETYPE_H
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -139,312 +136,6 @@ static struct {
 	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
 } drm;
 
-/* Text and the panel are defined in the other order below; the panel needs both. */
-static int text_init(int px);
-static int text_width(const char *s, int px);
-static void draw_text(int x, int y, int px, uint32_t colour, const char *s);
-static char focus_title[64];
-static int osd_until;              /* ms, monotonic; 0 = nothing shown */
-
-/*
- * Where drawing goes.
- *
- * Everything below paints through these two rather than naming a buffer, so the
- * same code can render into the back buffer for a page flip or into the buffer
- * the panel is reading, which is what scan-synchronous rendering needs. One
- * variable, rather than a choice threaded through eight drawing routines.
- */
-static uint32_t *dst_map;
-static uint32_t dst_stride;
-
-/*
- * Clip band, in scanlines. Scan-synchronous rendering draws the frame a band at
- * a time; every drawing routine below respects these rather than taking a band
- * argument, so the same code serves both the whole-frame and the banded path.
- */
-static int clip_y0, clip_y1;
-
-static void clip_all(void)
-{
-	clip_y0 = 0;
-	clip_y1 = (int)drm.h;
-}
-
-static void dst_select(int which)
-{
-	dst_map = drm.map[which];
-	dst_stride = drm.stride[which];
-}
-
-/* --- panel ----------------------------------------------------------------
- *
- * The compositor draws this rather than a shell client does. That is a
- * deliberate first step and not a shortcut towards the real thing: it needs no
- * xdg_popup and no text protocol, so the desktop exists while those are still
- * missing, and the clock and battery are always on screen regardless of what
- * any client does.
- */
-
-#define PANEL_H 104
-#define BATT_PATH "/sys/class/power_supply/sm5602_bat/"
-
-static int sysfs_int(const char *path)
-{
-	char buf[32];
-	ssize_t n;
-	int fd = open(path, O_RDONLY);
-	int v = -1;
-
-	if (fd < 0)
-		return -1;
-	n = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	if (n > 0) {
-		buf[n] = 0;
-		v = atoi(buf);
-	}
-	return v;
-}
-
-/* Plain rectangle fill, clipped. Everything on the panel goes through this. */
-static void fill_rect(int x0, int y0, int w, int h, uint32_t colour)
-{
-	int y, x;
-
-	for (y = y0; y < y0 + h; y++) {
-		uint32_t *row;
-
-		if (y < 0 || y >= (int)drm.h || y < clip_y0 || y >= clip_y1)
-			continue;
-		row = dst_map + (size_t)y * dst_stride / 4;
-		for (x = x0; x < x0 + w; x++)
-			if (x >= 0 && x < (int)drm.w)
-				row[x] = colour;
-	}
-}
-
-/*
- * The panel is drawn by the compositor, so something has to redraw it, and the
- * flip completion is not that something: it only says the last frame landed.
- *
- * With no client there are no commits, so repaint() never ran, and the keep-alive
- * re-presented a buffer that had been drawn once at startup - which is why the
- * desktop showed a bare gradient and no clock. Redraw on state change instead:
- * the minute rolling over, the brightness bar expiring, or an explicit request.
- */
-static int ui_dirty = 1;
-static int ui_minute = -1;
-
-static int clock_minute(void)
-{
-	time_t now = time(NULL);
-	struct tm tm;
-
-	localtime_r(&now, &tm);
-	return tm.tm_hour * 60 + tm.tm_min;
-}
-
-static int ui_needs_redraw(void)
-{
-	struct timespec ts;
-	int now_ms;
-
-	if (ui_dirty || clock_minute() != ui_minute)
-		return 1;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	now_ms = (int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-	if (osd_until && now_ms > osd_until)
-		return 1;
-
-	return 0;
-}
-
-static void draw_panel(void)
-{
-	char text[24];
-	time_t now;
-	struct tm tm;
-	int cap, x, bx = 28;
-
-	/* Bar, with a hairline so it reads as separate from the wallpaper
-	 * even where the two are the same shade. */
-	fill_rect(0, 0, (int)drm.w, PANEL_H, 0xFF16171B);
-	fill_rect(0, PANEL_H - 2, (int)drm.w, 2, 0xFF2E3038);
-
-	now = time(NULL);
-	localtime_r(&now, &tm);
-	/* Sized off the panel, not picked: 26px digits on a 2400px screen is
-	 * about one percent of the height, which is legible in a screenshot
-	 * and not at arm's length. */
-	snprintf(text, sizeof(text), "%02d:%02d", tm.tm_hour, tm.tm_min);
-	x = (int)drm.w - 32 - text_width(text, 56);
-	draw_text(x, (PANEL_H - 56) / 2 + 12, 56, 0xFFF2F3F5, text);
-
-	/* Battery: a pill with a level, and the percentage beside it. A pill
-	 * alone is a bar nobody can read a number off. */
-	cap = sysfs_int(BATT_PATH "capacity");
-	if (cap >= 0) {
-		int bw = 62, bh = 30, bx = 32, by = (PANEL_H - bh) / 2 - 8;
-		int fillw = bw * (cap > 100 ? 100 : cap) / 100;
-
-		fill_rect(bx, by, bw, bh, 0xFF2E3038);
-		fill_rect(bx + 3, by + 3, bw - 6, bh - 6, 0xFF16171B);
-		fill_rect(bx + 3, by + 3, (bw - 6) * fillw / (bw - 6),
-			  bh - 6, cap <= 15 ? 0xFFE05A4E : 0xFF5AC47A);
-		fill_rect(bx + bw + 2, by + bh / 3, 4, bh - 2 * (bh / 3),
-			  0xFF2E3038);
-
-		snprintf(text, sizeof(text), "%d%%", cap);
-		draw_text(bx + bw + 16, by + 4, 34, 0xFFC9CBD2, text);
-	}
-
-	/* Name of whatever has focus, so there is always a hint of what is
-	 * on screen. */
-	if (focus_title && focus_title[0]) {
-		x = bx + 210;
-		if (cap < 0)
-			x = 32;
-		draw_text(x, (PANEL_H - 34) / 2 + 6, 34, 0xFF9AA0AC,
-			  focus_title);
-	}
-
-	ui_minute = clock_minute();
-	ui_dirty = 0;
-}
-
-
-/* --- text ----------------------------------------------------------------
- *
- * FreeType over DejaVuSans, rasterised on demand and blended straight into the
- * scanout buffer.
- *
- * Hand-authoring a bitmap font was the alternative and it is what the rest of
- * this tree avoids - no pango, no fontconfig, no Xft, which the chroot has no
- * use for. DejaVuSans.ttf is already installed here (weston's dependencies
- * pulled it in), so the only missing piece was the rasteriser, and
- * libfreetype6 is sixteen packages. A desktop whose clock cannot be spelled is
- * not a desktop.
- */
-static FT_Library ft_lib;
-static FT_Face ft_face;
-static int ft_ready;
-
-static int text_init(int px)
-{
-	static const char *paths[] = {
-		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-		"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-	};
-	size_t i;
-
-	if (FT_Init_FreeType(&ft_lib)) {
-		fprintf(stderr, "lind: FreeType не инициализировался\n");
-		return -1;
-	}
-
-	for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
-		if (FT_New_Face(ft_lib, paths[i], 0, &ft_face) == 0) {
-			FT_Set_Pixel_Sizes(ft_face, 0, px);
-			ft_ready = 1;
-			return 0;
-		}
-	}
-
-	fprintf(stderr, "lind: нет шрифта DejaVu\n");
-	FT_Done_FreeType(ft_lib);
-	return -1;
-}
-
-static int text_width(const char *s, int px)
-{
-	int w = 0;
-
-	if (!ft_ready || FT_Set_Pixel_Sizes(ft_face, 0, px))
-		return 0;
-	while (*s) {
-		if (FT_Load_Char(ft_face, (unsigned char)*s,
-				 FT_LOAD_RENDER) == 0)
-			w += (ft_face->glyph->advance.x + 31) >> 6;
-		s++;
-	}
-	return w;
-}
-
-/* y is the top of the line, not the baseline, so callers do not each have to
- * know the face's ascent. */
-static void draw_text(int x, int y, int px, uint32_t colour, const char *s)
-{
-	int sr = (colour >> 16) & 0xFF, sg = (colour >> 8) & 0xFF;
-	int sb = colour & 0xFF, sa = (colour >> 24) & 0xFF;
-	int baseline;
-
-	if (!ft_ready || FT_Set_Pixel_Sizes(ft_face, 0, px))
-		return;
-	baseline = y + (int)(ft_face->size->metrics.ascender / 64);
-
-	while (*s) {
-		FT_GlyphSlot g;
-		int gy, top, advance;
-		const unsigned char *row;
-		int pitch;
-
-		if (FT_Load_Char(ft_face, (unsigned char)*s, FT_LOAD_RENDER))
-			break;
-		g = ft_face->glyph;
-		top = baseline - g->bitmap_top;
-		/*
-		 * pitch, not a stride derived from width. FreeType pads
-		 * rows itself and for this face pitch == width == 19, while
-		 * rounding 19 up to a multiple of four gives 20 - so every
-		 * row after the first was read a byte late, shifting the
-		 * glyph further sideways each row until it was a diagonal
-		 * smear. It looked vaguely digit-shaped because the overall
-		 * shape was right and only the shear was wrong.
-		 */
-		pitch = (int)g->bitmap.pitch;
-		if (pitch <= 0)
-			pitch = (int)g->bitmap.width;
-
-		for (gy = 0; gy < (int)g->bitmap.rows; gy++) {
-			int gx;
-			uint32_t *dst;
-			int dy = top + gy;
-
-			if (dy < 0 || dy >= (int)drm.h ||
-			    dy < clip_y0 || dy >= clip_y1)
-				continue;
-			dst = dst_map + (size_t)dy * dst_stride / 4;
-			row = g->bitmap.buffer + (size_t)gy * pitch;
-			for (gx = 0; gx < (int)g->bitmap.width; gx++) {
-				int cov = row[gx], px2 = x + gx;
-				int a;
-
-				if (!cov || px2 < 0 || px2 >= (int)drm.w)
-					continue;
-				/* Text is drawn onto whatever the window
-				 * left, so it is blended, not pasted. */
-				a = cov * sa / 255;
-				if (!a)
-					continue;
-				dst[px2] = (a << 24) |
-					   (((sr * a + (dst[px2] >> 16 & 0xFF) *
-					      (255 - a)) / 255) << 16) |
-					   (((sg * a + (dst[px2] >> 8 & 0xFF) *
-					      (255 - a)) / 255) << 8) |
-					   (((sb * a + (dst[px2] & 0xFF) *
-					      (255 - a)) / 255));
-			}
-		}
-
-		advance = (g->advance.x + 31) >> 6;
-		if (advance <= 0)
-			advance = 1;
-		x += advance;
-		s++;
-	}
-}
-
 /* --- backlight -----------------------------------------------------------
  *
  * The panel is a backlight device in sysfs, and nothing here is exotic. What
@@ -480,26 +171,26 @@ static int64_t bl_last_write_us;
  * finger. The gesture itself stays immediate: only the write is deferred.
  */
 #define BL_WRITE_INTERVAL_US 50000
+static int osd_until;              /* ms, monotonic; 0 = nothing shown */
+
 static void brightness_set(int level);
 
-/* Write the requested level, if it has changed and enough time has passed.
- * Returns whether a write happened, because that is also a reason to redraw. */
-static int brightness_flush(void)
+/* Write the requested level, if it has changed and enough time has passed. */
+static void brightness_flush(void)
 {
 	struct timespec ts;
 	int64_t now;
 
 	if (bl_want == bl_level || bl_fd < 0)
-		return 0;
+		return;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 	if (now - bl_last_write_us < BL_WRITE_INTERVAL_US)
-		return 0;
+		return;
 
 	bl_last_write_us = now;
 	brightness_set(bl_want);
-	return 1;
 }
 
 static int brightness_init(int level)
@@ -604,9 +295,9 @@ static void draw_osd(void)
 
 	/* Backdrop. */
 	for (i = y0 - 8; i < y0 + bar_h + 8; i++) {
-		if (i < 0 || i >= h || i < clip_y0 || i >= clip_y1)
+		if (i < 0 || i >= h)
 			continue;
-		p = dst_map + (size_t)i * dst_stride / 4;
+		p = drm.map[drm.render] + (size_t)i * drm.stride[drm.render] / 4;
 		for (int x = x0 - 8; x < x0 + 40 && x < w; x++)
 			p[x] = 0xC0000000;
 	}
@@ -618,9 +309,9 @@ static void draw_osd(void)
 	for (i = 0; i < bar_h; i++) {
 		int y = y0 + (h * 3 / 4) - 1 - i;
 
-		if (y < y0 || y >= h || y < clip_y0 || y >= clip_y1)
+		if (y < y0 || y >= h)
 			continue;
-		p = dst_map + (size_t)y * dst_stride / 4;
+		p = drm.map[drm.render] + (size_t)y * drm.stride[drm.render] / 4;
 		col = 0xFF40C0FF;
 		for (int x = x0 - 4; x < x0 + 36 && x < w; x++)
 			p[x] = col;
@@ -688,73 +379,6 @@ static struct wl_list pointers;
  *
  * So the pacing is done with a timer at the panel's refresh period instead.
  */
-/*
- * Do not draw until the panel has moved on.
- *
- * PAGE_FLIP_DONE arrives when the commit lands, not when the frame is scanned
- * out: the driver sends it from sde_kms_wait_for_commit_done(), and the buffer
- * swap itself is scheduled at the frame boundary. So the buffer is nominally
- * free before the beam has finished reading it, and drawing into it then tears.
- *
- * Invisible on a full-screen gradient - a tear in a gradient looks like the
- * gradient. Very visible on a hard-edged panel across the top, which flickered
- * for exactly as long as the panel was drawn.
- *
- * Half a frame period of margin, measured at 8343 us for this panel, is enough
- * to stay clear of the beam. The proper fix is for the driver to complete the
- * flip on the vblank interrupt; until then this is the honest workaround, and
- * it costs at most half a frame of latency.
- */
-#define DRAW_MARGIN_US 4000
-static int64_t draw_not_before_us;
-
-/*
- * The panel's own clock.
- *
- * PAGE_FLIP_DONE says the commit landed; it does not say where the scan beam
- * is, so there is nothing to time a write against. DRM_EVENT_CRTC_SEQUENCE
- * does: it carries time_ns in CLOCK_MONOTONIC, which is what makes writing the
- * frame in step with the scan possible instead of guessing with a margin.
- */
-#define VBLANK_TAG 0x4C494E44u
-static int scan_mode;
-static int64_t vblank_ns;   /* 0 = ни одного vblank ещё не видели */
-static int64_t vblank_period_ns = 8343000;   /* measured 8343 us */
-static unsigned long n_vblank;
-
-static void vblank_request(void)
-{
-	struct drm_crtc_queue_sequence sq;
-
-	memset(&sq, 0, sizeof(sq));
-	sq.crtc_id = drm.crtc_id;
-	sq.flags = 1;                  /* DRM_CRTC_SEQUENCE_NEXT_ON_MISS */
-	sq.user_data = VBLANK_TAG;
-
-	if (ioctl(drm.fd, DRM_IOCTL_CRTC_QUEUE_SEQUENCE, &sq) < 0 &&
-	    n_vblank == 0)
-		fprintf(stderr, "lind: QUEUE_SEQUENCE: %s\n", strerror(errno));
-}
-
-static void arm_draw_margin(void)
-{
-	struct timespec ts;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	draw_not_before_us = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 +
-			    DRAW_MARGIN_US;
-}
-
-static int draw_window_open(void)
-{
-	struct timespec ts;
-	int64_t now;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-	return now >= draw_not_before_us;
-}
-
 static int64_t ev_last_us;
 static void arm_keepalive(void);
 static struct surface *pending_surface;
@@ -793,12 +417,12 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 	for (y = 0; y < h; y++) {
 		int dy = oy + y;
 
-		if (dy < 0 || dy >= (int)drm.h || dy < clip_y0 || dy >= clip_y1)
+		if (dy < 0 || dy >= (int)drm.h)
 			continue;
-		memcpy((char *)dst_map + (size_t)dy * dst_stride + ox * 4,
+		memcpy((char *)drm.map[drm.render] + (size_t)dy * drm.stride[drm.render] + ox * 4,
 		       (char *)src + (size_t)y * src_stride,
-		       (size_t)w * 4 > (size_t)dst_stride - (size_t)ox * 4
-			? (size_t)dst_stride - (size_t)ox * 4
+		       (size_t)w * 4 > (size_t)drm.stride[drm.render] - (size_t)ox * 4
+			? (size_t)drm.stride[drm.render] - (size_t)ox * 4
 			: (size_t)w * 4);
 	}
 }
@@ -806,11 +430,11 @@ static void blit_shm(void *src, int src_stride, int w, int h, int ox, int oy)
 static void fill_background(void)
 {
 	int y;
-	uint32_t *row = dst_map;
+	uint32_t *row = drm.map[drm.render];
 	uint32_t grey = 0xFF181818;
 
 	for (y = 0; y < (int)drm.h; y++) {
-		uint32_t *p = row + (size_t)y * dst_stride / 4;
+		uint32_t *p = row + (size_t)y * drm.stride[drm.render] / 4;
 		int x;
 
 		/* A visible gradient, so a frozen frame is obvious rather
@@ -834,13 +458,7 @@ static void send_frame_callbacks(struct surface *s)
 	wl_list_insert(&s->frame_callbacks, &s->frame_callbacks);
 }
 
-/*
- * Everything one frame contains, drawn into whatever dst_map points at and
- * restricted to the clip band. Shared by the page-flip path, which draws the
- * whole frame into the back buffer, and the scan-synchronous path, which draws
- * it a band at a time.
- */
-static void draw_frame(struct surface *dirty)
+static void repaint(struct surface *dirty)
 {
 	struct surface *s;
 
@@ -859,15 +477,8 @@ static void draw_frame(struct surface *dirty)
 	}
 
 	brightness_flush();
-	draw_panel();
 	draw_osd();
-}
 
-static void repaint(struct surface *dirty)
-{
-	clip_all();
-	dst_select(drm.render);
-	draw_frame(dirty);
 	drm.n_repaint++;
 
 	/*
@@ -906,151 +517,9 @@ static void repaint(struct surface *dirty)
  * swap lands mid-scan, which shows as a band near the top of the screen a couple
  * of times a second.
  */
-/*
- * Scan-synchronous rendering.
- *
- * The page flip completion arrives when the commit lands, not when the frame is
- * scanned out, so double buffering plus this driver tears - invisibly on a
- * gradient, very visibly on the hard edge of the panel across the top. The
- * alternative needs no flip at all: write each band of the frame shortly before
- * the beam reaches it, and nothing is ever drawn behind the beam.
- *
- * The beam's position is known, not guessed. DRM_EVENT_CRTC_SEQUENCE gives
- * time_ns at the start of each refresh, and the period was measured at 8343 us,
- * so the beam reaches line L at vblank + L * period / height.
- *
- * Four bands. Fewer and each band takes longer than its own slot; more and
- * libwayland's millisecond timer granularity cannot place them, which is why
- * this arms a timerfd directly rather than using wl_event_loop_add_timer.
- *
- * Enabled with LIND_SCANSYNC=1, because it replaces the presentation path
- * wholesale and should be one variable away from the last known-good build.
- */
-#define SCAN_BANDS 4
-#define SCAN_LEAD_NS 1600000		/* longer than one band's draw */
-
-static int scan_fd = -1;
-static int scan_band;
-static int scan_active;
-static int scan_broken;
-static struct surface *scan_surface;
-static unsigned long n_scan_frames;
-
-static void scan_arm(int band)
-{
-	struct itimerspec its;
-	struct timespec ts;
-	int64_t band_ns, target, now;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	now = ts.tv_sec * 1000000000LL + ts.tv_nsec;
-	band_ns = vblank_period_ns / SCAN_BANDS;
-	target = vblank_ns + (int64_t)band * band_ns - SCAN_LEAD_NS;
-
-	/* Never schedule in the past: falling behind must mean drawing late,
-	 * not spinning the event loop. */
-	if (target <= now)
-		target = now + 200000;
-
-	memset(&its, 0, sizeof(its));
-	its.it_value.tv_sec = (time_t)(target / 1000000000LL);
-	its.it_value.tv_nsec = (long)(target % 1000000000LL);
-	timerfd_settime(scan_fd, 0, &its, NULL);
-}
-
-static void scan_begin(struct surface *s)
-{
-	if (scan_broken || !scan_fd || !vblank_ns)
-		return;
-	if (scan_active)
-		return;              /* a frame is already going */
-
-	scan_surface = s;
-	scan_band = 0;
-	scan_active = 1;
-	scan_arm(0);
-}
-
-static int scan_dispatch(int fd, uint32_t mask, void *data)
-{
-	uint64_t ticks;
-	struct surface *s;
-
-	(void)mask;
-	(void)data;
-
-	if (read(fd, &ticks, sizeof(ticks)) != (ssize_t)sizeof(ticks))
-		return 0;
-	if (!scan_active)
-		return 0;
-
-	/* Into the buffer the panel is reading. There is no flip in this
-	 * path: the frame is written where it is displayed, one band at a
-	 * time, and the beam follows behind. */
-	dst_select(drm.scanout);
-	clip_y0 = scan_band * ((int)drm.h / SCAN_BANDS);
-	clip_y1 = clip_y0 + (int)drm.h / SCAN_BANDS;
-	if (clip_y1 > (int)drm.h)
-		clip_y1 = (int)drm.h;
-
-	draw_frame(scan_surface);
-
-	scan_band++;
-	if (scan_band < SCAN_BANDS) {
-		scan_arm(scan_band);
-		return 0;
-	}
-
-	clip_all();
-	scan_active = 0;
-	n_scan_frames++;
-	drm.n_frames++;
-	drm.n_repaint++;
-
-	s = scan_surface;
-	scan_surface = NULL;
-	if (s)
-		send_frame_callbacks(s);
-	return 0;
-}
-
-/*
- * A timerfd rather than wl_event_loop_add_timer, because that takes milliseconds
- * and a band here is about two. The fd is level triggered on expiry, so handing
- * it to the loop works the same as any other fd - no need for, and no way to
- * get at, libwayland's own epoll.
- */
-static int scan_setup(struct wl_event_loop *loop)
-{
-	scan_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-	if (scan_fd < 0) {
-		fprintf(stderr, "lind: timerfd: %s\n", strerror(errno));
-		scan_broken = 1;
-		return -1;
-	}
-
-	if (!wl_event_loop_add_fd(loop, scan_fd, WL_EVENT_READABLE,
-				 scan_dispatch, NULL)) {
-		fprintf(stderr, "lind: таймер полос не добавился\n");
-		close(scan_fd);
-		scan_fd = -1;
-		scan_broken = 1;
-		return -1;
-	}
-	return 0;
-}
-
 static void maybe_present(struct surface *s)
 {
-	if (scan_mode) {
-		if (scan_active || !vblank_ns)
-			pending_surface = s;
-		else
-			scan_begin(s);
-		return;
-	}
-
-	if (drm.flip_pending || !draw_window_open()) {
+	if (drm.flip_pending) {
 		pending_surface = s;
 		return;
 	}
@@ -1080,55 +549,6 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 		return 0;
 	}
 
-	if (ev.base.type == 3) {   /* DRM_EVENT_CRTC_SEQUENCE */
-		/*
-		 * Take the instant from CLOCK_MONOTONIC on arrival, not from
-		 * the kernel's time_ns.
-		 *
-		 * time_ns comes back as zero on this driver - the same zero
-		 * that made the very first flip event look like garbage - so
-		 * using it left vblank_ns at 0, scan_begin() refused to start,
-		 * and the compositor drew nothing at all. It looked like a
-		 * dead touchscreen, because touch was working and nothing was
-		 * being redrawn.
-		 *
-		 * The event is queued a frame ahead and delivered at the vblank,
-		 * so arrival is the vblank to within dispatch latency, which is
-		 * far smaller than the 2.1 ms band slot. The period measured
-		 * here was 8.343 ms.
-		 */
-		struct timespec ts;
-
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		if (vblank_ns) {
-			int64_t d = ts.tv_sec * 1000000000LL + ts.tv_nsec -
-				    vblank_ns;
-
-			/* Ignore a blip: one late dispatch must not throw
-			 * the band schedule out by a whole frame. */
-			if (d > vblank_period_ns / 2 && d < vblank_period_ns * 3 / 2)
-				vblank_period_ns = d;
-		}
-		vblank_ns = ts.tv_sec * 1000000000LL + ts.tv_nsec;
-		n_vblank++;
-		if (n_vblank <= 6)
-			fprintf(stderr, "lind: vblank #%lu период=%lld ns\n",
-				n_vblank, (long long)vblank_period_ns);
-		vblank_request();
-
-		/*
-		 * In banded mode the vblank is the clock everything runs on,
-		 * so it is also where an idle compositor notices it has
-		 * something new to draw - the minute changed, the brightness
-		 * bar expired, a level was written. No separate timer: this
-		 * already arrives at the refresh rate.
-		 */
-		if (scan_mode && !scan_active &&
-		    (brightness_flush() || ui_needs_redraw()))
-			scan_begin(pending_surface);
-		return 0;
-	}
-
 	drm.n_events++;
 	if (drm.n_events <= 8) {
 		struct timespec ts;
@@ -1150,8 +570,6 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 	if (!is_flip_done(ev.base.type))
 		return 0;
 
-	arm_draw_margin();
-
 	s = flip_surface;
 	flip_surface = NULL;
 	drm.scanout = drm.render;
@@ -1167,7 +585,7 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 	 * panel. */
 	if (pending_surface)
 		maybe_present(pending_surface);
-	else if (!scan_mode)
+	else
 		arm_keepalive();
 
 	return 0;
@@ -1205,28 +623,18 @@ static int pace_dispatch(void *data)
 	pace_armed = 0;
 
 	if (!drm.flip_pending) {
-		int wrote = brightness_flush();
-
-		if ((wrote || ui_needs_redraw()) && draw_window_open()) {
-			/* Redraw: the minute changed, the brightness bar
-			 * expired, or a level was written. repaint()
-			 * draws and then flips. */
-			repaint(NULL);
-		} else if (drmModePageFlip(drm.fd, drm.crtc_id,
-					   drm.fb[drm.scanout],
-					   DRM_MODE_PAGE_FLIP_EVENT,
-					   &drm.flip_event) == 0) {
+		if (drmModePageFlip(drm.fd, drm.crtc_id,
+				   drm.fb[drm.scanout],
+				   DRM_MODE_PAGE_FLIP_EVENT,
+				   &drm.flip_event) == 0)
 			drm.flip_pending = 1;
-		} else {
+		else
 			drm.n_flip_err++;
-		}
 	}
 
 	/* Always re-armed, including when the flip above failed: the panel
-	 * must keep being fed or it goes dark. In banded mode there is no
-	 * flip and the vblank is the clock, so the timer stays idle. */
-	if (!scan_mode)
-		arm_keepalive();
+	 * must keep being fed or it goes dark. */
+	arm_keepalive();
 
 	/* A timer callback returning 0 is removed from the loop, and this
 	 * timer is the only thing keeping the display alive. */
@@ -1236,12 +644,8 @@ static int pace_dispatch(void *data)
 /* Printed on demand, so a flicker report can be turned into facts. */
 static void dump_stats(void)
 {
-	fprintf(stderr,
-		"lind: repaint=%lu frames=%lu events=%lu dropped=%lu "
-		"flip_err=%lu read_err=%lu pending=%d scan=%lu vblank=%lu\n",
-		drm.n_repaint, drm.n_frames, drm.n_events, drm.n_dropped,
-		drm.n_flip_err, drm.n_read_err, drm.flip_pending,
-		n_scan_frames, n_vblank);
+	fprintf(stderr, "lind: repaint=%lu frames=%lu\n", drm.n_repaint,
+		drm.n_frames);
 }
 
 /* --- shm ----------------------------------------------------------------
@@ -1856,12 +1260,8 @@ static void toplevel_set_title(struct wl_client *c, struct wl_resource *r,
 			       const char *title)
 {
 	(void)c;
-	if (title) {
+	if (title)
 		printf("lind: окно \"%s\"\n", title);
-		/* Shown on the panel, so the top bar says what is on screen
-		 * without a separate shell client. */
-		snprintf(focus_title, sizeof(focus_title), "%s", title);
-	}
 }
 
 static void toplevel_set_app_id(struct wl_client *c, struct wl_resource *r,
@@ -2368,7 +1768,11 @@ int main(void)
 	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
 			     NULL);
 
-	text_init(20);
+	/* Start the keep-alive chain here rather than waiting for the first
+	 * flip completion to start it: with no client there is no commit,
+	 * so nothing else ever arms the timer and the panel is never fed
+	 * again. */
+	arm_keepalive();
 
 	/* Android's SurfaceFlinger normally owns this. Once we take the
 	 * display the panel keeps whatever level it last had, 315 of 2047
@@ -2384,32 +1788,6 @@ int main(void)
 		return 1;
 	}
 
-	/*
-	 * LIND_SCANSYNC=1 switches presentation from page flips to writing the
-	 * frame where it is displayed, one band at a time, timed against the
-	 * beam. It replaces the presentation path wholesale, so it stays behind a
-	 * switch until it has been seen on the panel.
-	 */
-	if (getenv("LIND_SCANSYNC")) {
-		scan_mode = 1;
-		if (scan_setup(loop) == 0)
-			fprintf(stderr, "lind: полосная отрисовка, %d полосы\n",
-				SCAN_BANDS);
-		else
-			scan_mode = 0;
-	}
-
-	vblank_request();
-
-	/*
-	 * Start the keep-alive chain here - after the timer exists, which is
-	 * the whole reason it was silent before. Armed one step earlier it
-	 * tested a NULL handle, did nothing, and with no client there was no
-	 * commit to arm it later: repaint=0, frames=0, and a bare gradient
-	 * that no code path would ever touch again.
-	 */
-	arm_keepalive();
-
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
 	read_touch_range(touch_fd);
 	if (touch_fd < 0)
@@ -2418,15 +1796,6 @@ int main(void)
 	else
 		wl_event_loop_add_fd(loop, touch_fd, WL_EVENT_READABLE,
 				     read_touch, NULL);
-
-	/*
-	 * Pick a drawing target before anything paints. Every drawing routine
-	 * goes through dst_map, and it is NULL until here - so the startup
-	 * fill_background() below was dereferencing NULL and the compositor
-	 * died on its first frame, with nothing in the log after the touch
-	 * device opened because the later output was still buffered.
-	 */
-	dst_select(drm.render);
 
 	fill_background();
 	printf("lind: слушаю Wayland на %s; Ctrl-C или 'lindroid back' "
