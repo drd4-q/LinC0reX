@@ -47,6 +47,105 @@ fi
 
 # --- runtime state ---------------------------------------------------------
 
+# Write one udev database entry, keyed c<major>:<minor>.
+#
+# The c prefix is not cosmetic. systemd keys its udev database by
+# "c<major>:<minor>" for character devices; "n<major>:<minor>" is the old
+# udev-only name and this libudev does not consult it. An entry under the n
+# name is silently ignored, which is maddening to debug: DEVNAME still comes
+# back, because systemd derives that from the sysfs uevent file, so the entry
+# looks like it half-worked. Only ID_PATH, ID_SEAT, USEC_INITIALIZED and the
+# I: marker go missing.
+#
+# That last part is why the input devices were skipped. libinput drops any
+# event* node whose udev_device_get_is_initialized() is false, and the I:
+# record is the only thing that sets it.
+udev_entry() {
+	local syspath=$1 devname=$2 subsystem=$3 devtype=$4
+	local major=$5 minor=$6
+	shift 6
+
+	# Connectors and other non-device nodes under /sys/class match the
+	# globs below but carry no major/minor. Without this they produce a
+	# stray "n:" file.
+	if [ -z "$major" ] || [ -z "$minor" ] || [ -z "$devname" ]; then
+		return 0
+	fi
+
+	mkdir -p "$ROOTFS/run/udev/data"
+	{
+		echo "E:DEVPATH=${syspath#/sys}"
+		echo "E:DEVNAME=/dev/$devname"
+		[ -n "$devtype" ] && echo "E:DEVTYPE=$devtype"
+		echo "E:MAJOR=$major"
+		echo "E:MINOR=$minor"
+		echo "E:SUBSYSTEM=$subsystem"
+		echo "E:USEC_INITIALIZED=1000000000"
+		for kv in "$@"; do
+			echo "E:$kv"
+		done
+		echo "G:seat"
+		# systemd's "device is configured" marker. libinput skips any
+		# event* node without it, logging "skip unconfigured input
+		# device", and weston then refuses to start with no input at all.
+		echo "I:1000000000"
+	} > "$ROOTFS/run/udev/data/c$major:$minor"
+}
+
+# DRM nodes. Without DEVNAME in the database, libdrm's device list is empty and
+# weston reports "no drm device found" for a card it can plainly open.
+setup_drm_udev() {
+	local d
+	for d in /sys/class/drm/card*; do
+		[ -e "$d/uevent" ] || continue
+		udev_entry "$(readlink -f "$d" 2>/dev/null)" \
+			"dri/$(sed -n 's/^DEVNAME=dri\///p' "$d/uevent")" \
+			drm drm_minor \
+			"$(sed -n 's/^MAJOR=//p' "$d/uevent")" \
+			"$(sed -n 's/^MINOR=//p' "$d/uevent")" \
+			"ID_PATH=platform-lindroid"
+	done
+}
+
+# Input nodes. weston refuses to start without input devices, and it finds
+# them through libinput's udev enumeration, so ID_INPUT and ID_SEAT have to be
+# present. Android's ueventd emits neither.
+#
+# Classification is from the kernel device name and whether the device has any
+# absolute axes, which is enough to tell the touchscreen from the keys without
+# pulling in udev's hwdb.
+setup_input_udev() {
+	local e name abs
+	for e in /sys/class/input/event*; do
+		[ -e "$e/uevent" ] || continue
+		name=$(cat "$e/device/name" 2>/dev/null)
+		abs=$(cat "$e/device/capabilities/abs" 2>/dev/null | tr -d ' ')
+
+		set -- "ID_INPUT=1" "ID_SEAT=seat0" "ID_INPUT_TOUCHSCREEN=0"
+		case "$name" in
+		*jack*|*Jack*)
+			set -- "ID_INPUT=1" "ID_SEAT=seat0" "ID_INPUT_SWITCH=1" ;;
+		esac
+		if [ -n "$abs" ]; then
+			# A real digitiser reports the multitouch axes in slot
+			# range. fts_ts does; the uinput fakes do not.
+			case "$abs" in
+			*[3-9]*)
+				set -- "ID_INPUT=1" "ID_SEAT=seat0" \
+				      "ID_INPUT_TOUCHSCREEN=1" \
+				      "ID_INPUT_TOUCHPAD=0" ;;
+			esac
+		fi
+
+		udev_entry "$(readlink -f "$e" 2>/dev/null)" \
+			"$(sed -n 's|^DEVNAME=||p' "$e/uevent")" \
+			input "" \
+			"$(sed -n 's/^MAJOR=//p' "$e/uevent")" \
+			"$(sed -n 's/^MINOR=//p' "$e/uevent")" \
+			"$@" "ID_PATH=platform-lindroid-$name"
+	done
+}
+
 setup_mounts() {
 	mkdir -p "$MOUNTPOINT" "$ROOTFS" 2>/dev/null
 
@@ -58,33 +157,8 @@ setup_mounts() {
 	grep -q " $ROOTFS/sys " /proc/self/mounts 2>/dev/null ||
 		mount -o bind /sys "$ROOTFS/sys" 2>/dev/null
 
-	# libdrm resolves device names through libudev, which reads a database
-	# under /run/udev/data. Android has no udev, so without this both
-	# modetest and weston report "no drm device found" even though card0 is
-	# there and openable. Build it from sysfs so it cannot drift.
-	local d
-	for d in /sys/class/drm/card*; do
-		[ -e "$d/uevent" ] || continue
-		local name major minor syspath
-		name=$(sed -n 's/^DEVNAME=dri\///p' "$d/uevent" 2>/dev/null)
-		major=$(sed -n 's/^MAJOR=//p' "$d/uevent" 2>/dev/null)
-		minor=$(sed -n 's/^MINOR=//p' "$d/uevent" 2>/dev/null)
-		syspath=$(readlink -f "$d" 2>/dev/null)
-		[ -n "$name" ] && [ -n "$major" ] || continue
-
-		mkdir -p "$ROOTFS/run/udev/data"
-		cat > "$ROOTFS/run/udev/data/n$major:$minor" <<-EOF
-		E:DEVPATH=${syspath#/sys}
-		E:DEVNAME=/dev/dri/$name
-		E:DEVTYPE=drm_minor
-		E:MAJOR=$major
-		E:MINOR=$minor
-		E:SUBSYSTEM=drm
-		E:USEC_INITIALIZED=1000000000
-		E:ID_PATH=platform-lindroid
-		G:seat
-		EOF
-	done
+	setup_drm_udev
+	setup_input_udev
 }
 
 # Which processes have card0 open right now.
@@ -209,31 +283,52 @@ cmd_weston() {
 	setup_mounts
 	need_chroot
 	release_panel || exit 1
-	# --drm-device takes the sysname, not the path. weston hands the string
-	# straight to udev_device_new_from_subsystem_sysname(), so a path makes it
-	# search sysfs for an entry named "/dev/dri/card0" and find nothing.
+
+	# Everything goes in weston.ini, not on the command line. weston hands
+	# its whole argv to the shell module, and both desktop-shell and
+	# kiosk-shell abort with "fatal: unhandled option" on anything they do
+	# not recognise - including --renderer, which is exactly what has to be
+	# set here.
+	local ini=$ROOTFS/etc/xdg/weston/weston.ini
+	if [ ! -f "$ini" ]; then
+		mkdir -p "$(dirname "$ini")"
+		cat > "$ini" <<-'EOF'
+		[core]
+		backend=drm-backend.so
+		drm-device=card0
+		# pixman, not gl. The DRM backend path goes through GBM, and
+		# the only mesa driver there is kms_swrast, which wants DRI_DRI2.
+		# SDE does not provide that, so every DRI driver fails and EGL
+		# never comes up. pixman needs no GPU at all.
+		renderer=pixman
+		shell=kiosk-shell.so
+		EOF
+	fi
+
 	# fmtshim.so is only needed because SDE advertises a format twice and
-	# weston 10 asserts on it. If it is absent, weston will die on the
-	# duplicate, so say so rather than letting the abort look mysterious.
-	PRELOAD=""
+	# weston 10 asserts on it. See tools/fmtshim.c.
+	local preload=""
 	if [ -f "$ROOTFS/usr/lib/fmtshim.so" ]; then
-		PRELOAD="export LD_PRELOAD=/usr/lib/fmtshim.so"
+		preload="export LD_PRELOAD=/usr/lib/fmtshim.so"
 	else
 		warn "no /usr/lib/fmtshim.so - weston will abort on duplicate formats"
 	fi
 
-	say "starting weston. '$BINDIR/lindroid back' to return it."
+	say "starting weston. '$BINDIR/lindroid back' to return the display."
+	( sleep 8
+	  sock=$(ls "$ROOTFS"/run/user/0/wayland-* 2>/dev/null |
+	         grep -v '\.lock$' | head -1)
+	  if [ -n "$sock" ]; then
+		say "wayland socket: ${sock##*/}"
+		say "run a client with:  $BINDIR/lindroid run env WAYLAND_DISPLAY=${sock##*/} weston-terminal"
+	  fi ) &
+
 	exec chroot "$ROOTFS" /bin/sh -c \
 		"export PATH=/usr/bin:/bin
 		 export XDG_RUNTIME_DIR=/run/user/0
-		 $PRELOAD
+		 $preload
 		 mkdir -p /run/user/0 && chmod 700 /run/user/0
-		 exec /usr/bin/weston \
-		     --backend=drm-backend.so \
-		     --drm-device=card0 \
-		     --renderer=noop \
-		     --width=1080 --height=2400 \
-		     --socket=wayland-0"
+		 exec /usr/bin/weston"
 }
 
 cmd_back() {
