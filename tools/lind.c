@@ -143,6 +143,7 @@ static int text_init(int px);
 static int text_width(const char *s, int px);
 static void draw_text(int x, int y, int px, uint32_t colour, const char *s);
 static char focus_title[64];
+static int osd_until;              /* ms, monotonic; 0 = nothing shown */
 
 /* --- panel ----------------------------------------------------------------
  *
@@ -153,7 +154,7 @@ static char focus_title[64];
  * any client does.
  */
 
-#define PANEL_H 76
+#define PANEL_H 104
 #define BATT_PATH "/sys/class/power_supply/sm5602_bat/"
 
 static int sysfs_int(const char *path)
@@ -191,6 +192,43 @@ static void fill_rect(int x0, int y0, int w, int h, uint32_t colour)
 	}
 }
 
+/*
+ * The panel is drawn by the compositor, so something has to redraw it, and the
+ * flip completion is not that something: it only says the last frame landed.
+ *
+ * With no client there are no commits, so repaint() never ran, and the keep-alive
+ * re-presented a buffer that had been drawn once at startup - which is why the
+ * desktop showed a bare gradient and no clock. Redraw on state change instead:
+ * the minute rolling over, the brightness bar expiring, or an explicit request.
+ */
+static int ui_dirty = 1;
+static int ui_minute = -1;
+
+static int clock_minute(void)
+{
+	time_t now = time(NULL);
+	struct tm tm;
+
+	localtime_r(&now, &tm);
+	return tm.tm_hour * 60 + tm.tm_min;
+}
+
+static int ui_needs_redraw(void)
+{
+	struct timespec ts;
+	int now_ms;
+
+	if (ui_dirty || clock_minute() != ui_minute)
+		return 1;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	now_ms = (int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	if (osd_until && now_ms > osd_until)
+		return 1;
+
+	return 0;
+}
+
 static void draw_panel(void)
 {
 	char text[24];
@@ -205,15 +243,18 @@ static void draw_panel(void)
 
 	now = time(NULL);
 	localtime_r(&now, &tm);
+	/* Sized off the panel, not picked: 26px digits on a 2400px screen is
+	 * about one percent of the height, which is legible in a screenshot
+	 * and not at arm's length. */
 	snprintf(text, sizeof(text), "%02d:%02d", tm.tm_hour, tm.tm_min);
-	x = (int)drm.w - 28 - text_width(text, 36);
-	draw_text(x, 20, 36, 0xFFF2F3F5, text);
+	x = (int)drm.w - 32 - text_width(text, 56);
+	draw_text(x, (PANEL_H - 56) / 2 + 12, 56, 0xFFF2F3F5, text);
 
 	/* Battery: a pill with a level, and the percentage beside it. A pill
 	 * alone is a bar nobody can read a number off. */
 	cap = sysfs_int(BATT_PATH "capacity");
 	if (cap >= 0) {
-		int bw = 46, bh = 22, bx = 28, by = (PANEL_H - bh) / 2 - 4;
+		int bw = 62, bh = 30, bx = 32, by = (PANEL_H - bh) / 2 - 8;
 		int fillw = bw * (cap > 100 ? 100 : cap) / 100;
 
 		fill_rect(bx, by, bw, bh, 0xFF2E3038);
@@ -224,18 +265,23 @@ static void draw_panel(void)
 			  0xFF2E3038);
 
 		snprintf(text, sizeof(text), "%d%%", cap);
-		draw_text(bx + bw + 14, by + 2, 24, 0xFFC9CBD2, text);
+		draw_text(bx + bw + 16, by + 4, 34, 0xFFC9CBD2, text);
 	}
 
 	/* Name of whatever has focus, so there is always a hint of what is
 	 * on screen. */
 	if (focus_title && focus_title[0]) {
-		x = bx + 150;
+		x = bx + 210;
 		if (cap < 0)
-			x = 28;
-		draw_text(x, 26, 26, 0xFF9AA0AC, focus_title);
+			x = 32;
+		draw_text(x, (PANEL_H - 34) / 2 + 6, 34, 0xFF9AA0AC,
+			  focus_title);
 	}
+
+	ui_minute = clock_minute();
+	ui_dirty = 0;
 }
+
 
 /* --- text ----------------------------------------------------------------
  *
@@ -392,26 +438,26 @@ static int64_t bl_last_write_us;
  * finger. The gesture itself stays immediate: only the write is deferred.
  */
 #define BL_WRITE_INTERVAL_US 50000
-static int osd_until;              /* ms, monotonic; 0 = nothing shown */
-
 static void brightness_set(int level);
 
-/* Write the requested level, if it has changed and enough time has passed. */
-static void brightness_flush(void)
+/* Write the requested level, if it has changed and enough time has passed.
+ * Returns whether a write happened, because that is also a reason to redraw. */
+static int brightness_flush(void)
 {
 	struct timespec ts;
 	int64_t now;
 
 	if (bl_want == bl_level || bl_fd < 0)
-		return;
+		return 0;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 	if (now - bl_last_write_us < BL_WRITE_INTERVAL_US)
-		return;
+		return 0;
 
 	bl_last_write_us = now;
 	brightness_set(bl_want);
+	return 1;
 }
 
 static int brightness_init(int level)
@@ -600,6 +646,72 @@ static struct wl_list pointers;
  *
  * So the pacing is done with a timer at the panel's refresh period instead.
  */
+/*
+ * Do not draw until the panel has moved on.
+ *
+ * PAGE_FLIP_DONE arrives when the commit lands, not when the frame is scanned
+ * out: the driver sends it from sde_kms_wait_for_commit_done(), and the buffer
+ * swap itself is scheduled at the frame boundary. So the buffer is nominally
+ * free before the beam has finished reading it, and drawing into it then tears.
+ *
+ * Invisible on a full-screen gradient - a tear in a gradient looks like the
+ * gradient. Very visible on a hard-edged panel across the top, which flickered
+ * for exactly as long as the panel was drawn.
+ *
+ * Half a frame period of margin, measured at 8343 us for this panel, is enough
+ * to stay clear of the beam. The proper fix is for the driver to complete the
+ * flip on the vblank interrupt; until then this is the honest workaround, and
+ * it costs at most half a frame of latency.
+ */
+#define DRAW_MARGIN_US 4000
+static int64_t draw_not_before_us;
+
+/*
+ * The panel's own clock.
+ *
+ * PAGE_FLIP_DONE says the commit landed; it does not say where the scan beam
+ * is, so there is nothing to time a write against. DRM_EVENT_CRTC_SEQUENCE
+ * does: it carries time_ns in CLOCK_MONOTONIC, which is what makes writing the
+ * frame in step with the scan possible instead of guessing with a margin.
+ */
+#define VBLANK_TAG 0x4C494E44u
+static int64_t vblank_ns;
+static int64_t vblank_period_ns = 8343000;   /* measured 8343 us */
+static unsigned long n_vblank;
+
+static void vblank_request(void)
+{
+	struct drm_crtc_queue_sequence sq;
+
+	memset(&sq, 0, sizeof(sq));
+	sq.crtc_id = drm.crtc_id;
+	sq.flags = 1;                  /* DRM_CRTC_SEQUENCE_NEXT_ON_MISS */
+	sq.user_data = VBLANK_TAG;
+
+	if (ioctl(drm.fd, DRM_IOCTL_CRTC_QUEUE_SEQUENCE, &sq) < 0 &&
+	    n_vblank == 0)
+		fprintf(stderr, "lind: QUEUE_SEQUENCE: %s\n", strerror(errno));
+}
+
+static void arm_draw_margin(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	draw_not_before_us = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 +
+			    DRAW_MARGIN_US;
+}
+
+static int draw_window_open(void)
+{
+	struct timespec ts;
+	int64_t now;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+	return now >= draw_not_before_us;
+}
+
 static int64_t ev_last_us;
 static void arm_keepalive(void);
 static struct surface *pending_surface;
@@ -741,7 +853,7 @@ static void repaint(struct surface *dirty)
  */
 static void maybe_present(struct surface *s)
 {
-	if (drm.flip_pending) {
+	if (drm.flip_pending || !draw_window_open()) {
 		pending_surface = s;
 		return;
 	}
@@ -771,6 +883,20 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 		return 0;
 	}
 
+	if (ev.base.type == 3) {   /* DRM_EVENT_CRTC_SEQUENCE */
+		struct drm_event_crtc_sequence *ce = (void *)&ev;
+
+		if (vblank_ns)
+			vblank_period_ns = ce->time_ns - vblank_ns;
+		vblank_ns = ce->time_ns;
+		n_vblank++;
+		if (n_vblank <= 6)
+			fprintf(stderr, "lind: vblank #%lu период=%lld ns\n",
+				n_vblank, (long long)vblank_period_ns);
+		vblank_request();
+		return 0;
+	}
+
 	drm.n_events++;
 	if (drm.n_events <= 8) {
 		struct timespec ts;
@@ -791,6 +917,8 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 
 	if (!is_flip_done(ev.base.type))
 		return 0;
+
+	arm_draw_margin();
 
 	s = flip_surface;
 	flip_surface = NULL;
@@ -845,13 +973,21 @@ static int pace_dispatch(void *data)
 	pace_armed = 0;
 
 	if (!drm.flip_pending) {
-		if (drmModePageFlip(drm.fd, drm.crtc_id,
-				   drm.fb[drm.scanout],
-				   DRM_MODE_PAGE_FLIP_EVENT,
-				   &drm.flip_event) == 0)
+		int wrote = brightness_flush();
+
+		if ((wrote || ui_needs_redraw()) && draw_window_open()) {
+			/* Redraw: the minute changed, the brightness bar
+			 * expired, or a level was written. repaint()
+			 * draws and then flips. */
+			repaint(NULL);
+		} else if (drmModePageFlip(drm.fd, drm.crtc_id,
+					   drm.fb[drm.scanout],
+					   DRM_MODE_PAGE_FLIP_EVENT,
+					   &drm.flip_event) == 0) {
 			drm.flip_pending = 1;
-		else
+		} else {
 			drm.n_flip_err++;
+		}
 	}
 
 	/* Always re-armed, including when the flip above failed: the panel
@@ -1994,12 +2130,6 @@ int main(void)
 	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
 			     NULL);
 
-	/* Start the keep-alive chain here rather than waiting for the first
-	 * flip completion to start it: with no client there is no commit,
-	 * so nothing else ever arms the timer and the panel is never fed
-	 * again. */
-	arm_keepalive();
-
 	text_init(20);
 
 	/* Android's SurfaceFlinger normally owns this. Once we take the
@@ -2015,6 +2145,15 @@ int main(void)
 		drm_teardown();
 		return 1;
 	}
+
+	/*
+	 * Start the keep-alive chain here - after the timer exists, which is
+	 * the whole reason it was silent before. Armed one step earlier it
+	 * tested a NULL handle, did nothing, and with no client there was no
+	 * commit to arm it later: repaint=0, frames=0, and a bare gradient
+	 * that no code path would ever touch again.
+	 */
+	arm_keepalive();
 
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
 	read_touch_range(touch_fd);
