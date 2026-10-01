@@ -3,26 +3,32 @@
 #
 # lindroid - start the Linux chroot on this phone and hand it the display.
 #
-# Everything here is runtime state that a reboot destroys: the bind mounts, the
-# udev database, and the two services that have to be stopped before Linux can
-# take the panel. Re-running this script rebuilds all of it, so it is safe to
-# run after any reboot.
+# Two phases, always in this order:
 #
-#   lindroid              interactive shell in the chroot
-#   lindroid shell        same
+#   1. setup  mount everything the chroot needs, rebuild the udev database,
+#             make sure the loader can find what it needs. All of this is
+#             runtime state that a reboot destroys.
+#   2. action take the panel from Android, or give it back, or run something.
+#
+# Never the other way round. A compositor started against a half-mounted
+# chroot fails in ways that look like driver bugs: no /dev/dri, no udev
+# database, no pty, no fonts.
+#
+#   lindroid              interactive shell, Android still owns the display
 #   lindroid status       who holds the display right now
-#   lindroid test         give the panel to Linux, show colour bars
-#   lindroid weston       give the panel to Linux, run weston
+#   lindroid test         colour bars on the panel
+#   lindroid weston       weston on the panel
+#   lindroid terminal     weston + weston-terminal
+#   lindroid flower       weston + a client that needs no fonts
+#   lindroid client <c>   run one Wayland client against a running weston
 #   lindroid back         give the panel back to Android
 #   lindroid run <cmd>    run one command in the chroot
 #
 # Root is required; the script re-executes itself under su if it has to.
-#
-# Keep in sync with tools/panel.sh in the lindroid-kernel repo, which does the
-# same handover from the adb side.
 
 ROOTFS=/data/lindroid/droot
 BINDIR=/data/lindroid/bin
+MOUNTPOINT=/data/lindroid
 CARD0=/dev/dri/card0
 
 # The two services that hold the panel. SurfaceFlinger is the obvious one, but
@@ -34,6 +40,7 @@ COMPOSER=vendor.qti.hardware.display.composer
 
 say()  { echo "== $*"; }
 warn() { echo "!! $*" >&2; }
+die()  { warn "$*"; exit 1; }
 
 # --- privilege -------------------------------------------------------------
 
@@ -45,7 +52,9 @@ if [ "$(id -u)" != 0 ]; then
 	exec su -c "sh $0$args"
 fi
 
-# --- runtime state ---------------------------------------------------------
+# --- phase 1: runtime state ------------------------------------------------
+
+mounted() { grep -q " $ROOTFS/$1 " /proc/self/mounts 2>/dev/null; }
 
 # Write one udev database entry, keyed c<major>:<minor>.
 #
@@ -57,20 +66,17 @@ fi
 # looks like it half-worked. Only ID_PATH, ID_SEAT, USEC_INITIALIZED and the
 # I: marker go missing.
 #
-# That last part is why the input devices were skipped. libinput drops any
-# event* node whose udev_device_get_is_initialized() is false, and the I:
-# record is the only thing that sets it.
+# That last part is why input devices were skipped. libinput drops any event*
+# node whose udev_device_get_is_initialized() is false, and the I: record is
+# the only thing that sets it.
 udev_entry() {
 	local syspath=$1 devname=$2 subsystem=$3 devtype=$4
 	local major=$5 minor=$6
 	shift 6
 
 	# Connectors and other non-device nodes under /sys/class match the
-	# globs below but carry no major/minor. Without this they produce a
-	# stray "n:" file.
-	if [ -z "$major" ] || [ -z "$minor" ] || [ -z "$devname" ]; then
-		return 0
-	fi
+	# globs below but carry no major/minor.
+	[ -n "$major" ] && [ -n "$minor" ] && [ -n "$devname" ] || return 0
 
 	mkdir -p "$ROOTFS/run/udev/data"
 	{
@@ -85,15 +91,10 @@ udev_entry() {
 			echo "E:$kv"
 		done
 		echo "G:seat"
-		# systemd's "device is configured" marker. libinput skips any
-		# event* node without it, logging "skip unconfigured input
-		# device", and weston then refuses to start with no input at all.
 		echo "I:1000000000"
 	} > "$ROOTFS/run/udev/data/c$major:$minor"
 }
 
-# DRM nodes. Without DEVNAME in the database, libdrm's device list is empty and
-# weston reports "no drm device found" for a card it can plainly open.
 setup_drm_udev() {
 	local d
 	for d in /sys/class/drm/card*; do
@@ -107,13 +108,9 @@ setup_drm_udev() {
 	done
 }
 
-# Input nodes. weston refuses to start without input devices, and it finds
-# them through libinput's udev enumeration, so ID_INPUT and ID_SEAT have to be
-# present. Android's ueventd emits neither.
-#
-# Classification is from the kernel device name and whether the device has any
-# absolute axes, which is enough to tell the touchscreen from the keys without
-# pulling in udev's hwdb.
+# Classification is from the kernel device name and by whether the device has
+# absolute axes, which separates the touchscreen from the keys without pulling
+# in udev's hwdb.
 setup_input_udev() {
 	local e name abs
 	for e in /sys/class/input/event*; do
@@ -126,16 +123,13 @@ setup_input_udev() {
 		*jack*|*Jack*)
 			set -- "ID_INPUT=1" "ID_SEAT=seat0" "ID_INPUT_SWITCH=1" ;;
 		esac
-		if [ -n "$abs" ]; then
-			# A real digitiser reports the multitouch axes in slot
-			# range. fts_ts does; the uinput fakes do not.
-			case "$abs" in
-			*[3-9]*)
-				set -- "ID_INPUT=1" "ID_SEAT=seat0" \
-				      "ID_INPUT_TOUCHSCREEN=1" \
-				      "ID_INPUT_TOUCHPAD=0" ;;
-			esac
-		fi
+		# A real digitiser reports multitouch axes in the slot range.
+		# fts_ts does; the uinput fakes do not.
+		case "$abs" in
+		*[3-9]*)
+			set -- "ID_INPUT=1" "ID_SEAT=seat0" \
+			      "ID_INPUT_TOUCHSCREEN=1" "ID_INPUT_TOUCHPAD=0" ;;
+		esac
 
 		udev_entry "$(readlink -f "$e" 2>/dev/null)" \
 			"$(sed -n 's|^DEVNAME=||p' "$e/uevent")" \
@@ -146,29 +140,43 @@ setup_input_udev() {
 	done
 }
 
-setup_mounts() {
+# Everything that has to be true before any client or compositor is started.
+setup_env() {
 	mkdir -p "$MOUNTPOINT" "$ROOTFS" 2>/dev/null
 
-	# Idempotent: only mount what is not already there.
-	grep -q " $ROOTFS/proc " /proc/self/mounts 2>/dev/null ||
-		mount -t proc proc "$ROOTFS/proc" 2>/dev/null
 	# rbind, not bind: a plain bind does not carry submounts, so devpts
-	# stays absent in the chroot and weston-terminal dies with "failed to
-	# fork and create pty".
-	grep -q " $ROOTFS/dev " /proc/self/mounts 2>/dev/null ||
-		mount -o rbind /dev "$ROOTFS/dev" 2>/dev/null
-	grep -q " $ROOTFS/sys " /proc/self/mounts 2>/dev/null ||
-		mount -o rbind /sys "$ROOTFS/sys" 2>/dev/null
+	# stays absent in the chroot and anything that opens a pty fails with
+	# "No such device".
+	mounted proc  || mount -t proc proc "$ROOTFS/proc" 2>/dev/null
+	mounted dev   || mount -o rbind /dev "$ROOTFS/dev" 2>/dev/null
+	mounted sys   || mount -o rbind /sys "$ROOTFS/sys" 2>/dev/null
+
+	# A separate devpts instance, in case the rbind above did not bring one
+	# along. Without it weston-terminal cannot fork a pty.
+	if ! grep -q " $ROOTFS/dev/pts " /proc/self/mounts 2>/dev/null; then
+		mkdir -p "$ROOTFS/dev/pts" 2>/dev/null
+		mount -t devpts devpts "$ROOTFS/dev/pts" 2>/dev/null
+	fi
 
 	setup_drm_udev
 	setup_input_udev
+
+	# Font cache. Without the fontconfig package there is no fc-cache, so
+	# the cache is never built and every string renders as nothing at all -
+	# which looks exactly like a compositor that draws no text.
+	if [ -x "$ROOTFS/usr/bin/fc-cache" ]; then
+		chroot "$ROOTFS" /bin/sh -c \
+			'export PATH=/usr/bin:/bin; fc-cache -f' >/dev/null 2>&1
+	fi
+
+	[ -d "$ROOTFS/usr/bin" ] || die "no chroot at $ROOTFS"
 }
 
-# Which processes have card0 open right now.
-#
-# Done with a single ls rather than a readlink per descriptor: Android runs
-# enough processes and descriptors that the shell loop takes minutes, which
-# reads as the device hanging.
+# --- phase 2: actions ------------------------------------------------------
+
+# Which processes have card0 open. One ls over /proc/*/fd/* rather than a
+# readlink per descriptor: the shell loop takes minutes on Android and reads
+# as the device hanging.
 holders() {
 	ls -l /proc/*/fd/* 2>/dev/null |
 	grep 'dri/card0' |
@@ -180,7 +188,6 @@ holders() {
 	done | sort -u
 }
 
-# Stop the display owners and wait for the card to actually be free.
 release_panel() {
 	say "stopping the display owners"
 	setprop ctl.stop "$SF" 2>/dev/null
@@ -192,21 +199,21 @@ release_panel() {
 		sleep 1
 		i=$((i + 1))
 	done
-	if [ -n "$(holders)" ]; then
+	[ -n "$(holders)" ] && {
 		warn "something still holds $CARD0 after ${i}s:"
 		holders | sed 's/^/  /'
 		return 1
-	fi
+	}
 	say "$CARD0 is free"
-	return 0
 }
 
 # Composer first, SurfaceFlinger second. The other order leaves SurfaceFlinger
 # starting against a display nothing owns.
 restore_panel() {
 	say "stopping Linux from the display"
-	pkill -f kmsclaim 2>/dev/null
-	pkill -f weston 2>/dev/null
+	pkill kmsclaim 2>/dev/null
+	pkill weston 2>/dev/null
+	pkill weston-terminal 2>/dev/null
 	sleep 1
 
 	say "restarting the display owners"
@@ -214,7 +221,6 @@ restore_panel() {
 	sleep 1
 	setprop ctl.start "$SF" 2>/dev/null
 	sleep 2
-	status
 }
 
 status() {
@@ -234,79 +240,56 @@ status() {
 	local h
 	h=$(holders)
 	[ -z "$h" ] && echo "  (none)" || echo "$h" | sed 's/^/  /'
+
+	say "wayland sockets"
+	wayland_socket | sed 's/^/  /' || echo "  (none)"
 }
 
-need_chroot() {
-	if [ ! -x "$ROOTFS/usr/bin/weston" ]; then
-		warn "no chroot at $ROOTFS"
-		warn "build it on a PC with tools/fetchdeb.py, push the tarball"
-		warn "to /data/lindroid/ and unpack it there"
-		exit 1
-	fi
+# Write a launcher into the chroot, so the environment is identical every time
+# a client is started. Body is read from stdin.
+#
+# This exists mainly to dodge a quoting problem: a chroot-side script needs a
+# shebang the chroot can resolve, and /system/bin/sh does not exist in there.
+write_runner() {
+	local name=$1
+	mkdir -p "$ROOTFS/usr/bin"
+	{
+		echo '#!/bin/sh'
+		echo 'export PATH=/usr/bin:/bin'
+		echo 'export XDG_RUNTIME_DIR=/run/user/0'
+		cat
+	} > "$ROOTFS/usr/bin/$name"
+	chmod 755 "$ROOTFS/usr/bin/$name"
 }
 
-# --- commands --------------------------------------------------------------
-
-cmd_status() {
-	setup_mounts
-	status
+# Basename of the running compositor's socket, empty if there is none.
+wayland_socket() {
+	ls "$ROOTFS"/run/user/0/wayland-* 2>/dev/null |
+		grep -v '\.lock$' | head -1
 }
 
-cmd_shell() {
-	setup_mounts
-	need_chroot
-	say "chroot ready. Android is still in charge of the display."
-	echo "  to take the panel:  $BINDIR/lindroid test   (or: weston)"
-	echo "  to give it back:    $BINDIR/lindroid back"
-	exec chroot "$ROOTFS" /bin/sh -c \
-		"export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-		 exec /bin/sh -l"
-}
-
-cmd_run() {
-	setup_mounts
-	need_chroot
-	[ $# -eq 0 ] && { echo 'usage: lindroid run <command>' >&2; exit 2; }
-	exec chroot "$ROOTFS" /bin/sh -c \
-		"export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-		 exec \"\$@\"" sh "$@"
-}
-
-cmd_test() {
-	setup_mounts
-	need_chroot
-	release_panel || exit 1
-	# kmsclaim stays in the foreground on purpose: DRM master is released
-	# when its fd closes, so its lifetime is what keeps the panel ours.
-	say "colour bars incoming. '$BINDIR/lindroid back' to return it."
-	exec chroot "$ROOTFS" /usr/bin/kmsclaim
-}
-
-cmd_weston() {
-	setup_mounts
-	need_chroot
-	release_panel || exit 1
-
-	# Everything goes in weston.ini, not on the command line. weston hands
-	# its whole argv to the shell module, and both desktop-shell and
-	# kiosk-shell abort with "fatal: unhandled option" on anything they do
-	# not recognise - including --renderer, which is exactly what has to be
-	# set here.
+weston_ini() {
 	local ini=$ROOTFS/etc/xdg/weston/weston.ini
-	if [ ! -f "$ini" ]; then
-		mkdir -p "$(dirname "$ini")"
-		cat > "$ini" <<-'EOF'
-		[core]
-		backend=drm-backend.so
-		drm-device=card0
-		# pixman, not gl. The DRM backend path goes through GBM, and
-		# the only mesa driver there is kms_swrast, which wants DRI_DRI2.
-		# SDE does not provide that, so every DRI driver fails and EGL
-		# never comes up. pixman needs no GPU at all.
-		renderer=pixman
-		shell=kiosk-shell.so
-		EOF
-	fi
+	mkdir -p "$(dirname "$ini")"
+	cat > "$ini" <<-'EOF'
+	# The key is use-pixman, not renderer. weston 10 reads it from [core];
+	# "renderer" is not a recognised key and is silently ignored, leaving
+	# the GL renderer in place.
+	#
+	# pixman, not gl: the DRM backend path goes through GBM, where the only
+	# usable mesa driver is kms_swrast and it wants DRI_DRI2. SDE does not
+	# implement that, so every DRI driver fails. pixman needs no GPU and
+	# presents through plain dumb buffers.
+	[core]
+	backend=drm-backend.so
+	drm-device=card0
+	use-pixman=true
+	shell=kiosk-shell.so
+	EOF
+}
+
+start_weston() {
+	weston_ini
 
 	# fmtshim.so is only needed because SDE advertises a format twice and
 	# weston 10 asserts on it. See tools/fmtshim.c.
@@ -317,25 +300,117 @@ cmd_weston() {
 		warn "no /usr/lib/fmtshim.so - weston will abort on duplicate formats"
 	fi
 
-	say "starting weston. '$BINDIR/lindroid back' to return the display."
-	( sleep 8
-	  sock=$(ls "$ROOTFS"/run/user/0/wayland-* 2>/dev/null |
-	         grep -v '\.lock$' | head -1)
-	  if [ -n "$sock" ]; then
-		say "wayland socket: ${sock##*/}"
-		say "run a client with:  $BINDIR/lindroid run env WAYLAND_DISPLAY=${sock##*/} weston-terminal"
-	  fi ) &
+	write_runner weston-run <<EOF
+export WESTON_CONFIG_FILE=/etc/xdg/weston/weston.ini
+$preload
+rm -f /run/user/0/wayland-*
+mkdir -p /run/user/0 && chmod 700 /run/user/0
+exec /usr/bin/weston
+EOF
 
+	say "starting weston"
+	setsid chroot "$ROOTFS" /usr/bin/weston-run \
+		> "$MOUNTPOINT/weston.log" 2>&1 < /dev/null &
+
+	# Wait for the socket rather than sleeping a fixed amount.
+	local i=0 sock=""
+	while [ $i -lt 15 ]; do
+		sock=$(wayland_socket)
+		[ -n "$sock" ] && break
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ -n "$sock" ]; then
+		say "wayland socket: ${sock##*/}"
+		say "a client can now connect:  WAYLAND_DISPLAY=${sock##*/}"
+	else
+		warn "weston did not create a socket; see $MOUNTPOINT/weston.log"
+	fi
+}
+
+run_client() {
+	local bin=$1 name=$2
+	shift 2
+	[ -x "$ROOTFS/usr/bin/$bin" ] || die "$bin is not installed"
+
+	write_runner "$name" <<EOF
+export SHELL=/bin/sh
+export TERM=xterm
+export WAYLAND_DISPLAY=\${WAYLAND_DISPLAY:-wayland-1}
+exec /usr/bin/$bin $*
+EOF
+
+	say "launching $bin"
+	setsid chroot "$ROOTFS" "/usr/bin/$name" \
+		> "$MOUNTPOINT/$name.log" 2>&1 < /dev/null &
+	sleep 3
+	tail -2 "$MOUNTPOINT/$name.log" 2>/dev/null | sed 's/^/  /'
+}
+
+# --- commands --------------------------------------------------------------
+
+cmd_shell() {
+	setup_env
+	say "chroot ready. Android still owns the display."
+	echo "  take the panel:  $BINDIR/lindroid weston   (or: terminal, flower, test)"
+	echo "  give it back:    $BINDIR/lindroid back"
 	exec chroot "$ROOTFS" /bin/sh -c \
-		"export PATH=/usr/bin:/bin
-		 export XDG_RUNTIME_DIR=/run/user/0
-		 $preload
-		 mkdir -p /run/user/0 && chmod 700 /run/user/0
-		 exec /usr/bin/weston"
+		'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+		 exec /bin/sh -l'
+}
+
+cmd_run() {
+	setup_env
+	[ $# -gt 0 ] || die 'usage: lindroid run <command>'
+	exec chroot "$ROOTFS" /bin/sh -c \
+		'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+		 exec "$@"' sh "$@"
+}
+
+cmd_test() {
+	setup_env
+	release_panel || exit 1
+	say "colour bars. '$BINDIR/lindroid back' to return the display."
+	exec chroot "$ROOTFS" /usr/bin/kmsclaim
+}
+
+cmd_weston() {
+	setup_env
+	release_panel || exit 1
+	start_weston
+	say "running. '$BINDIR/lindroid back' to return the display."
+	say "weston log: $MOUNTPOINT/weston.log"
+}
+
+cmd_terminal() {
+	setup_env
+	release_panel || exit 1
+	start_weston
+	run_client weston-terminal term-run
+}
+
+cmd_flower() {
+	setup_env
+	release_panel || exit 1
+	start_weston
+	run_client weston-flower flower-run
+}
+
+cmd_client() {
+	setup_env
+	[ $# -gt 0 ] || die 'usage: lindroid client <command> [args...]'
+	local name=${1##*/}
+	run_client "$name" "client-$name"
 }
 
 cmd_back() {
 	restore_panel
+	status
+}
+
+cmd_status() {
+	setup_env
+	status
 }
 
 case "${1:-shell}" in
@@ -343,10 +418,13 @@ shell)   shift; cmd_shell "$@" ;;
 run)     shift; cmd_run "$@" ;;
 test)    cmd_test ;;
 weston)  cmd_weston ;;
+terminal) cmd_terminal ;;
+flower)  cmd_flower ;;
+client)  shift; cmd_client "$@" ;;
 back)    cmd_back ;;
 status)  cmd_status ;;
 -h|--help|help)
-	sed -n '3,22p' "$0" | sed 's/^# \?//'
+	sed -n '4,24p' "$0" | sed 's/^# \?//'
 	;;
 *)
 	warn "unknown command: $1"
