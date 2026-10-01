@@ -21,6 +21,7 @@
 #   lindroid terminal     weston + weston-terminal
 #   lindroid flower       weston + a client that needs no fonts
 #   lindroid lind         lind, our own compositor, on the proven path
+#   lindroid demo [secs]  lind plus a client, one command, for a fresh boot
 #   lindroid client <c>   run one Wayland client against a running weston
 #   lindroid back         give the panel back to Android
 #   lindroid run <cmd>    run one command in the chroot
@@ -392,17 +393,79 @@ cmd_terminal() {
 	run_client weston-terminal term-run
 }
 
+# The panel can be busy even when both services report stopped, which shows up
+# as "SetCrtc: Permission denied" and reads like a driver fault. Wait it out
+# rather than pass the problem on.
+wait_card_free() {
+	local i=0
+	while [ $i -lt 10 ]; do
+		[ -z "$(holders)" ] && return 0
+		sleep 1
+		i=$((i + 1))
+	done
+	warn "$CARD0 всё ещё занят:"
+	holders | sed 's/^/  /'
+	return 1
+}
+
+start_lind() {
+	[ -x "$ROOTFS/usr/bin/lind" ] || die "lind не установлен в chroot"
+	rm -f "$ROOTFS"/run/user/0/wayland-* 2>/dev/null
+	say "запускаю lind"
+	setsid chroot "$ROOTFS" /usr/bin/lind \
+		> "$MOUNTPOINT/lind.log" 2>&1 < /dev/null &
+
+	local i=0
+	while [ $i -lt 10 ]; do
+		[ -S "$ROOTFS/run/user/0/wayland-0" ] && break
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ ! -S "$ROOTFS/run/user/0/wayland-0" ]; then
+		warn "lind не создал сокет; лог:"
+		tail -5 "$MOUNTPOINT/lind.log" 2>/dev/null | sed 's/^/  /'
+		return 1
+	fi
+	return 0
+}
+
 cmd_lind() {
 	setup_env
 	release_panel || exit 1
-	say "запускаю lind (свой композитор)"
-	[ -x "$ROOTFS/usr/bin/lind" ] || die "lind не установлен"
-	setsid chroot "$ROOTFS" /usr/bin/lind \
-		> "$MOUNTPOINT/lind.log" 2>&1 < /dev/null &
-	sleep 4
-	tail -3 "$MOUNTPOINT/lind.log" 2>/dev/null | sed 's/^/  /'
-	say "сокет: $ROOTFS/run/user/0/wayland-0"
+	wait_card_free || exit 1
+	start_lind || exit 1
+	say "lind слушает $ROOTFS/run/user/0/wayland-0"
 	say "лог: $MOUNTPOINT/lind.log"
+	say "клиент: $BINDIR/lindroid client ..."
+}
+
+# Everything in one command, because the phone reboots often enough that
+# doing it by hand is a dozen steps and any of them can be the stale one.
+cmd_demo() {
+	setup_env
+	release_panel || exit 1
+	wait_card_free || exit 1
+	start_lind || exit 1
+
+	[ -x "$ROOTFS/usr/bin/lindtest" ] || die "lindtest не установлен"
+	say "запускаю lindtest - полоса пойдёт сверху вниз"
+
+	# A client needs the runtime dir and socket name in its environment.
+	# lind sets the first for itself with setenv, which does nothing for
+	# anything else launched beside it.
+	write_runner lindtest-run <<-EOF
+	export XDG_RUNTIME_DIR=/run/user/0
+	export WAYLAND_DISPLAY=wayland-0
+	exec /usr/bin/lindtest ${1:-60}
+	EOF
+
+	setsid chroot "$ROOTFS" /usr/bin/lindtest-run \
+		> "$MOUNTPOINT/lindtest.log" 2>&1 < /dev/null &
+
+	sleep 4
+	say "готово. полоса движется, андроид выключен из панели."
+	say "вернуть: $BINDIR/lindroid back"
+	tail -3 "$MOUNTPOINT/lindtest.log" 2>/dev/null | sed 's/^/  /'
 }
 
 cmd_flower() {
@@ -437,6 +500,7 @@ weston)  cmd_weston ;;
 terminal) cmd_terminal ;;
 flower)  cmd_flower ;;
 lind)    cmd_lind ;;
+demo)    shift; cmd_demo "$@" ;;
 client)  shift; cmd_client "$@" ;;
 back)    cmd_back ;;
 status)  cmd_status ;;
