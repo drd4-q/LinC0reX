@@ -152,10 +152,13 @@ setup_mounts() {
 	# Idempotent: only mount what is not already there.
 	grep -q " $ROOTFS/proc " /proc/self/mounts 2>/dev/null ||
 		mount -t proc proc "$ROOTFS/proc" 2>/dev/null
+	# rbind, not bind: a plain bind does not carry submounts, so devpts
+	# stays absent in the chroot and weston-terminal dies with "failed to
+	# fork and create pty".
 	grep -q " $ROOTFS/dev " /proc/self/mounts 2>/dev/null ||
-		mount -o bind /dev "$ROOTFS/dev" 2>/dev/null
+		mount -o rbind /dev "$ROOTFS/dev" 2>/dev/null
 	grep -q " $ROOTFS/sys " /proc/self/mounts 2>/dev/null ||
-		mount -o bind /sys "$ROOTFS/sys" 2>/dev/null
+		mount -o rbind /sys "$ROOTFS/sys" 2>/dev/null
 
 	setup_drm_udev
 	setup_input_udev
