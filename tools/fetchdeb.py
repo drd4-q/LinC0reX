@@ -25,7 +25,7 @@ INDEX = f"{MIRROR}/dists/{DIST}/main/binary-arm64/Packages.gz"
 # would be harmless but wasteful, and for a few of them (usrmerge) it is not.
 BASE = {
     "libc6", "libgcc-s1", "libcrypt1", "libgomp1", "libstdc++6", "libzstd1",
-    "zlib1g", "libselinux1", "libpcre2-8-0", "libbz2-1.0", "liblzma5", "libzstd1",
+    "libselinux1", "libpcre2-8-0", "libbz2-1.0", "liblzma5",
     "gcc-12-base", "libgcc-s1", "multiarch-support", "debconf", "dpkg",
     "install-info", "libgcrypt20", "libgpg-error0", "liblz4-1", "libsystemd0",
     "libudev1", "libcap2", "libpam0g", "libaudit1", "libtinfo6", "libgmp10",
