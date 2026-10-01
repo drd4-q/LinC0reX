@@ -31,7 +31,10 @@
 
 #include <wayland-client.h>
 
+#include "xdg-shell-client-protocol.h"
+
 static struct wl_compositor *compositor;
+static struct xdg_wm_base *wm_base;
 static struct wl_shm *shm;
 static struct wl_output *output;
 static struct wl_seat *seat;
@@ -146,6 +149,61 @@ static const struct wl_pointer_listener pointer_impl = {
 	.axis_discrete = NULL,
 };
 
+static void wm_base_ping(void *d, struct xdg_wm_base *b, uint32_t serial)
+{
+	(void)d;
+	xdg_wm_base_pong(b, serial);
+}
+
+static const struct xdg_wm_base_listener wm_base_listener = {
+	.ping = wm_base_ping,
+};
+
+static struct xdg_toplevel *top;
+static int configured;
+
+static void surface_configure(void *d, struct xdg_surface *xs, uint32_t serial)
+{
+	(void)d;
+	xdg_surface_ack_configure(xs, serial);
+	configured = 1;
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+	.configure = surface_configure,
+};
+
+static void toplevel_configure(void *d, struct xdg_toplevel *t, int32_t w,
+			       int32_t h, struct wl_array *states)
+{
+	(void)d; (void)t; (void)w; (void)h; (void)states;
+	configured = 1;
+}
+
+static void toplevel_close(void *d, struct xdg_toplevel *t)
+{
+	(void)d; (void)t;
+}
+
+static void toplevel_configure_bounds(void *d, struct xdg_toplevel *t,
+				      int32_t w, int32_t h)
+{
+	(void)d; (void)t; (void)w; (void)h;
+}
+
+static void toplevel_wm_capabilities(void *d, struct xdg_toplevel *t,
+				     struct wl_array *caps)
+{
+	(void)d; (void)t; (void)caps;
+}
+
+static const struct xdg_toplevel_listener toplevel_listener = {
+	.configure = toplevel_configure,
+	.close = toplevel_close,
+	.configure_bounds = toplevel_configure_bounds,
+	.wm_capabilities = toplevel_wm_capabilities,
+};
+
 static void registry_global(void *d, struct wl_registry *r, uint32_t name,
 			    const char *iface, uint32_t version)
 {
@@ -160,6 +218,10 @@ static void registry_global(void *d, struct wl_registry *r, uint32_t name,
 		output = wl_registry_bind(r, name, &wl_output_interface,
 					  version < 2 ? version : 2);
 		wl_output_add_listener(output, &output_impl, NULL);
+	} else if (!strcmp(iface, "xdg_wm_base") && !wm_base) {
+		wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface,
+					   version < 3 ? version : 3);
+		xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
 	} else if (!strcmp(iface, "wl_seat") && !seat) {
 		seat = wl_registry_bind(r, name, &wl_seat_interface,
 				       version < 5 ? version : 5);
@@ -274,8 +336,9 @@ int main(int argc, char **argv)
 	wl_display_roundtrip(display);
 	wl_display_roundtrip(display);
 
-	if (!compositor || !shm) {
-		fprintf(stderr, "нет wl_compositor/wl_shm\n");
+	if (!compositor || !shm || !wm_base) {
+		fprintf(stderr,
+			"нет wl_compositor/wl_shm/xdg_wm_base\n");
 		return 1;
 	}
 	if (!have_output_info) {
@@ -308,7 +371,32 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	/*
+	 * A window the xdg way: wl_surface, wrapped in an xdg_surface, with an
+	 * xdg_toplevel inside. A client is not allowed to map until the
+	 * compositor has sent a configure, so the roundtrip after creating the
+	 * toplevel is required, not decorative.
+	 */
 	surface = wl_compositor_create_surface(compositor);
+	{
+		struct xdg_surface *xs = xdg_wm_base_get_xdg_surface(wm_base,
+								  surface);
+
+		xdg_surface_add_listener(xs, &xdg_surface_listener, NULL);
+		top = xdg_surface_get_toplevel(xs);
+		xdg_toplevel_add_listener(top, &toplevel_listener, NULL);
+		xdg_toplevel_set_title(top, "lindtest");
+		xdg_toplevel_set_app_id(top, "lind.test");
+		xdg_toplevel_set_fullscreen(top, NULL);
+		wl_surface_commit(surface);
+	}
+	wl_display_roundtrip(display);
+	if (!configured) {
+		fprintf(stderr, "композитор не прислал configure\n");
+		return 1;
+	}
+	printf("окно смаплено через xdg-shell\n");
+
 	pool = wl_shm_create_pool(shm, fd, (int32_t)size);
 	buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride,
 					   WL_SHM_FORMAT_XRGB8888);
@@ -363,6 +451,7 @@ int main(int argc, char **argv)
 	printf("итого %d кадров\n", frames);
 	wl_buffer_destroy(buffer);
 	wl_shm_pool_destroy(pool);
+	xdg_toplevel_destroy(top);
 	wl_surface_destroy(surface);
 	wl_display_disconnect(display);
 	return 0;

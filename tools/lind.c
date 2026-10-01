@@ -51,6 +51,7 @@
 
 #include <drm_fourcc.h>
 #include <wayland-server.h>
+#include "xdg-shell-server-protocol.h"
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -80,11 +81,22 @@ static struct {
 
 /* --- state -------------------------------------------------------------- */
 
+enum surface_role {
+	ROLE_NONE,
+	ROLE_TOPLEVEL,
+};
+
 struct surface {
 	struct wl_list link;
 	struct wl_resource *resource;
 	struct wl_resource *pending_buffer, *current_buffer;
 	struct wl_list frame_callbacks;
+	/* xdg-shell wraps a wl_surface rather than replacing it, so the
+	 * surface keeps both. A toplevel needs an initial configure before
+	 * the client is allowed to map, so the toplevel resource is kept too. */
+	struct wl_resource *xdg_surface, *xdg_toplevel;
+	int fullscreen_requested;
+	enum surface_role role;
 	int32_t width, height;
 	int has_buffer;
 };
@@ -257,13 +269,21 @@ static void shm_pool_resize(struct wl_client *c, struct wl_resource *r,
 	struct shm_pool *p = wl_resource_get_user_data(r);
 
 	(void)c;
-	if (size <= 0 || (size_t)size < p->size)
+	/*
+	 * The fd arrived from the client and is a memfd, which ftruncate
+	 * cannot grow once the mapping exists in some kernel versions - and
+	 * weston-flower hits this on its first buffer. Growing is legal and
+	 * common, so the pool is remapped instead of refused.
+	 */
+	if (size <= 0 || (size_t)size <= p->size)
 		return;
-	if (ftruncate(p->fd, size) < 0)
+	if (ftruncate(p->fd, size) < 0) {
 		wl_resource_post_error(r, WL_SHM_ERROR_INVALID_FD,
-				       "resize failed");
-	else
-		p->size = size;
+				       "pool resize failed: %s",
+				       strerror(errno));
+		return;
+	}
+	p->size = size;
 }
 
 static void shm_pool_create_buffer(struct wl_client *c, struct wl_resource *r,
@@ -647,6 +667,269 @@ static int read_touch(int fd, uint32_t mask, void *data)
 	return 0;
 }
 
+
+/* --- xdg-shell ------------------------------------------------------------
+ *
+ * Everything an ordinary application needs to open a window, and nothing
+ * more. A client creates a wl_surface, wraps it in an xdg_surface, puts an
+ * xdg_toplevel inside, then attaches and commits - which is exactly what the
+ * wl_surface path above already handles.
+ *
+ * Left out, deliberately rather than silently: xdg_popup, so menus and
+ * subwindows will not open; window geometry, since a phone has one screen and
+ * the client is given all of it; and focus, so every toplevel is treated
+ * identically. None of that blocks a single full-screen client, which is the
+ * case worth having.
+ */
+
+static const struct xdg_toplevel_interface toplevel_impl;
+
+static void toplevel_destroy(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c;
+	wl_resource_destroy(r);
+}
+
+static void toplevel_set_parent(struct wl_client *c, struct wl_resource *r,
+				struct wl_resource *parent)
+{
+	(void)c; (void)r; (void)parent;
+}
+
+static void toplevel_set_title(struct wl_client *c, struct wl_resource *r,
+			       const char *title)
+{
+	(void)c;
+	if (title)
+		printf("lind: окно \"%s\"\n", title);
+}
+
+static void toplevel_set_app_id(struct wl_client *c, struct wl_resource *r,
+				const char *app_id)
+{
+	(void)c; (void)r; (void)app_id;
+}
+
+static void toplevel_show_window_menu(struct wl_client *c,
+				     struct wl_resource *r,
+				     struct wl_resource *seat,
+				     uint32_t serial, int32_t x, int32_t y)
+{
+	(void)c; (void)r; (void)seat; (void)serial; (void)x; (void)y;
+}
+
+static void toplevel_move(struct wl_client *c, struct wl_resource *r,
+			  struct wl_resource *seat, uint32_t serial)
+{
+	(void)c; (void)r; (void)seat; (void)serial;
+}
+
+static void toplevel_resize(struct wl_client *c, struct wl_resource *r,
+			    struct wl_resource *seat, uint32_t serial,
+			    uint32_t edges)
+{
+	(void)c; (void)r; (void)seat; (void)serial; (void)edges;
+}
+
+static void toplevel_set_max_size(struct wl_client *c, struct wl_resource *r,
+				  int32_t w, int32_t h)
+{
+	(void)c; (void)r; (void)w; (void)h;
+}
+
+static void toplevel_set_min_size(struct wl_client *c, struct wl_resource *r,
+				  int32_t w, int32_t h)
+{
+	(void)c; (void)r; (void)w; (void)h;
+}
+
+static void toplevel_set_maximized(struct wl_client *c, struct wl_resource *r)
+{
+	struct surface *s = wl_resource_get_user_data(r);
+
+	(void)c;
+	/* One display means one maximum, which is the whole panel. */
+	if (s)
+		s->fullscreen_requested = 1;
+}
+
+static void toplevel_unset_maximized(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c; (void)r;
+}
+
+static void toplevel_set_fullscreen(struct wl_client *c, struct wl_resource *r,
+				    struct wl_resource *output)
+{
+	struct surface *s = wl_resource_get_user_data(r);
+
+	(void)c; (void)output;
+	if (s)
+		s->fullscreen_requested = 1;
+}
+
+static void toplevel_unset_fullscreen(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c; (void)r;
+}
+
+static void toplevel_set_minimized(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c; (void)r;
+}
+
+static const struct xdg_toplevel_interface toplevel_impl = {
+	.destroy = toplevel_destroy,
+	.set_parent = toplevel_set_parent,
+	.set_title = toplevel_set_title,
+	.set_app_id = toplevel_set_app_id,
+	.show_window_menu = toplevel_show_window_menu,
+	.move = toplevel_move,
+	.resize = toplevel_resize,
+	.set_max_size = toplevel_set_max_size,
+	.set_min_size = toplevel_set_min_size,
+	.set_maximized = toplevel_set_maximized,
+	.unset_maximized = toplevel_unset_maximized,
+	.set_fullscreen = toplevel_set_fullscreen,
+	.unset_fullscreen = toplevel_unset_fullscreen,
+	.set_minimized = toplevel_set_minimized,
+};
+
+static void xdg_surface_destroy(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c;
+	wl_resource_destroy(r);
+}
+
+static void xdg_surface_get_toplevel(struct wl_client *c, struct wl_resource *r,
+				     uint32_t id)
+{
+	struct surface *s = wl_resource_get_user_data(r);
+	struct wl_resource *tl;
+
+	if (!s)
+		return;
+	if (s->xdg_toplevel) {
+		wl_resource_post_error(r, XDG_SURFACE_ERROR_ALREADY_CONSTRUCTED,
+				       "toplevel already created");
+		return;
+	}
+
+	tl = wl_resource_create(c, &xdg_toplevel_interface,
+				xdg_toplevel_interface.version, id);
+	if (!tl)
+		return;
+	wl_resource_set_implementation(tl, &toplevel_impl, s, NULL);
+	s->xdg_toplevel = tl;
+	s->role = ROLE_TOPLEVEL;
+
+	/*
+	 * A client must not map until it has seen a configure, so this is the
+	 * earliest point it can be sent. Doing it here rather than at commit
+	 * time is not a detail: by commit the buffer is already applied.
+	 */
+	xdg_surface_send_configure(s->xdg_surface, 1);
+	xdg_toplevel_send_configure(s->xdg_toplevel, 0, 0, 0);
+}
+
+static void xdg_surface_get_popup(struct wl_client *c, struct wl_resource *r,
+				 uint32_t id, struct wl_resource *parent,
+				 struct wl_resource *positioner)
+{
+	(void)c; (void)id; (void)parent; (void)positioner;
+	wl_resource_post_error(r, XDG_SURFACE_ERROR_NOT_CONSTRUCTED,
+			       "popups are not implemented in lind");
+}
+
+static void xdg_surface_set_window_geometry(struct wl_client *c,
+					    struct wl_resource *r,
+					    int32_t x, int32_t y,
+					    int32_t w, int32_t h)
+{
+	struct surface *s = wl_resource_get_user_data(r);
+
+	(void)c; (void)r; (void)x; (void)y;
+	/* One screen, so a client that asks for a window at least as large as
+	 * the panel is asking to fill it. Anything smaller is ignored rather
+	 * than honoured, since there is nowhere to put the difference. */
+	if (s && w > 0 && h > 0 && (uint32_t)w >= drm.w && (uint32_t)h >= drm.h)
+		s->fullscreen_requested = 1;
+}
+
+static void xdg_surface_ack_configure(struct wl_client *c, struct wl_resource *r,
+				      uint32_t serial)
+{
+	(void)c; (void)r; (void)serial;
+}
+
+static const struct xdg_surface_interface xdg_surface_impl = {
+	.destroy = xdg_surface_destroy,
+	.get_toplevel = xdg_surface_get_toplevel,
+	.get_popup = xdg_surface_get_popup,
+	.set_window_geometry = xdg_surface_set_window_geometry,
+	.ack_configure = xdg_surface_ack_configure,
+};
+
+
+/* A ping obliges the client to answer with a pong. Sending a ping with no
+ * handler for the reply is a protocol error the moment the client complies,
+ * which is exactly what it did. */
+static void wm_base_pong(struct wl_client *c, struct wl_resource *r,
+			 uint32_t serial)
+{
+	(void)c; (void)r; (void)serial;
+}
+
+static void wm_base_destroy(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c;
+	wl_resource_destroy(r);
+}
+
+static void wm_base_get_xdg_surface(struct wl_client *c, struct wl_resource *r,
+				   uint32_t id, struct wl_resource *surface_r)
+{
+	struct surface *s = wl_resource_get_user_data(surface_r);
+	struct wl_resource *xs;
+
+	if (!s) {
+		wl_resource_post_error(r, XDG_WM_BASE_ERROR_ROLE,
+				       "not a wl_surface");
+		return;
+	}
+	if (s->xdg_surface) {
+		wl_resource_post_error(r, XDG_WM_BASE_ERROR_ROLE,
+				       "surface already has an xdg role");
+		return;
+	}
+
+	xs = wl_resource_create(c, &xdg_surface_interface,
+				xdg_surface_interface.version, id);
+	if (!xs)
+		return;
+	wl_resource_set_implementation(xs, &xdg_surface_impl, s, NULL);
+	s->xdg_surface = xs;
+	s->role = ROLE_TOPLEVEL;
+}
+
+static const struct xdg_wm_base_interface wm_base_impl = {
+	.destroy = wm_base_destroy,
+	.get_xdg_surface = wm_base_get_xdg_surface,
+	.pong = wm_base_pong,
+};
+
+static void bind_wm_base(struct wl_client *c, void *d, uint32_t ver, uint32_t id)
+{
+	struct wl_resource *r;
+
+	(void)d;
+	r = wl_resource_create(c, &xdg_wm_base_interface, ver, id);
+	if (!r)
+		return;
+	wl_resource_set_implementation(r, &wm_base_impl, NULL, NULL);
+	xdg_wm_base_send_ping(r, ++serial_counter);
+}
+
 /* --- globals ------------------------------------------------------------ */
 
 static void bind_compositor(struct wl_client *c, void *d, uint32_t ver,
@@ -899,6 +1182,7 @@ int main(void)
 			 bind_subcompositor);
 	wl_global_create(display, &wl_output_interface, 2, NULL, bind_output);
 	wl_global_create(display, &wl_seat_interface, 5, NULL, bind_seat);
+	wl_global_create(display, &xdg_wm_base_interface, 3, NULL, bind_wm_base);
 
 	loop = wl_display_get_event_loop(display);
 
