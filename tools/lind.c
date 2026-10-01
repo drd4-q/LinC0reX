@@ -153,9 +153,45 @@ static struct {
 static int bl_fd = -1;
 static int bl_max = 2047;
 static int bl_level;
+static int bl_want;             /* requested level, not yet written */
+static int64_t bl_last_write_us;
+
+/*
+ * Coalesced, because the obvious version stalls the compositor.
+ *
+ * A touch panel reports a few hundred times a second during a drag, and writing
+ * brightness straight from that path meant a sysfs write per sample. Each write
+ * goes through sde_backlight_device_update_status() into the DSI PWM
+ * programming under sde_vm_lock, synchronously, on the thread that also has to
+ * present frames - so the animation stuttered for exactly as long as the swipe
+ * lasted.
+ *
+ * 20 Hz is far more often than anyone can perceive in a brightness ramp, and it
+ * is written from repaint() so it also follows the display rather than the
+ * finger. The gesture itself stays immediate: only the write is deferred.
+ */
+#define BL_WRITE_INTERVAL_US 50000
 static int osd_until;              /* ms, monotonic; 0 = nothing shown */
 
 static void brightness_set(int level);
+
+/* Write the requested level, if it has changed and enough time has passed. */
+static void brightness_flush(void)
+{
+	struct timespec ts;
+	int64_t now;
+
+	if (bl_want == bl_level || bl_fd < 0)
+		return;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+	if (now - bl_last_write_us < BL_WRITE_INTERVAL_US)
+		return;
+
+	bl_last_write_us = now;
+	brightness_set(bl_want);
+}
 
 static int brightness_init(int level)
 {
@@ -190,7 +226,9 @@ static int brightness_init(int level)
 	}
 	bl_fd = fd;
 
-	brightness_set(level < 0 ? bl_max : level);
+	bl_want = level < 0 ? bl_max : level;
+	bl_last_write_us = 0;
+	brightness_flush();
 	return 0;
 }
 
@@ -226,6 +264,7 @@ static void brightness_set(int level)
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		osd_until = (int)(ts.tv_sec * 1000 +
 				  ts.tv_nsec / 1000000) + 1200;
+		bl_last_write_us = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 	}
 }
 
@@ -264,7 +303,9 @@ static void draw_osd(void)
 	}
 
 	/* Filled portion, level from the bottom. */
-	bar_h = bar_h * bl_level / bl_max;
+	/* Follow the requested level, not the written one: writes are
+	 * deferred, and a bar that lagged the finger would read as lag. */
+	bar_h = bar_h * (bl_want ? bl_want : bl_level) / bl_max;
 	for (i = 0; i < bar_h; i++) {
 		int y = y0 + (h * 3 / 4) - 1 - i;
 
@@ -435,6 +476,7 @@ static void repaint(struct surface *dirty)
 			 b->width, b->height, 0, 0);
 	}
 
+	brightness_flush();
 	draw_osd();
 
 	drm.n_repaint++;
@@ -1160,9 +1202,13 @@ static int read_touch(int fd, uint32_t mask, void *data)
 						if (dy > -10 && dy < 10)
 							swipe_moved = 0;
 						else if (span > 0) {
-							brightness_set(swipe_bright0 -
-								       dy * bl_max /
-								       span * 3 / 2);
+							bl_want = swipe_bright0 -
+								 dy * bl_max /
+								 span * 3 / 2;
+							if (bl_want < bl_max / 10)
+								bl_want = bl_max / 10;
+							if (bl_want > bl_max)
+								bl_want = bl_max;
 							swipe_moved = 1;
 						}
 					}
