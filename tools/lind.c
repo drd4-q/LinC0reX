@@ -114,7 +114,7 @@ static struct {
 	 * Writing the scanned-out buffer in place is what panelloop did, at
 	 * 82 fps, with a clean moving image - so that is what this does.
 	 */
-	unsigned long n_repaint, n_frames;
+	unsigned long n_repaint, n_frames, n_commits;
 	struct drm_mode_page_flip_event flip_event;
 } drm;
 
@@ -181,6 +181,9 @@ static struct wl_list pointers;
  */
 static struct surface *pending_surface;
 static struct wl_event_source *pace_timer;
+static int pace_armed;
+/* The panel runs at 120 Hz. */
+#define PACE_MSEC 8
 static uint32_t serial_counter;
 static uint32_t last_x, last_y;
 static int touch_active;
@@ -283,11 +286,17 @@ static int pace_dispatch(void *data)
 
 	(void)data;
 	pending_surface = NULL;
-	if (s) {
+	pace_armed = 0;
+
+	/* repaint() sends the frame callbacks; doing it here as well would
+	 * release the same callbacks twice. */
+	if (s)
 		repaint(s);
-		send_frame_callbacks(s);
-	}
-	return 0;
+
+	/* A timer source whose callback returns 0 is removed from the loop.
+	 * Returning 0 here meant exactly one repaint for the life of the
+	 * process, which looked like a compositor that had simply stopped. */
+	return 1;
 }
 
 /* Printed on demand, so a flicker report can be turned into facts. */
@@ -539,9 +548,20 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r)
 	 * fast client rewrite the buffer mid-scan, so the frame is scheduled
 	 * and the callback is sent when it has actually been shown.
 	 */
+	drm.n_commits++;
 	pending_surface = s;
-	if (pace_timer)
-		wl_event_source_timer_update(pace_timer, 0);
+
+	/*
+	 * Only arm if it is not already armed. Re-arming a timer that is
+	 * pending pushes its deadline out again, so a client committing
+	 * every millisecond postpones the frame forever and the compositor
+	 * starves: measured, the client drew 28004 frames and the
+	 * compositor repainted 13.
+	 */
+	if (pace_timer && !pace_armed) {
+		wl_event_source_timer_update(pace_timer, PACE_MSEC);
+		pace_armed = 1;
+	}
 }
 
 static const struct wl_surface_interface surface_impl = {
