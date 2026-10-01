@@ -883,7 +883,11 @@ static void repaint(struct surface *dirty)
 	 * rather than an empty gradient, and that is the whole point of a home
 	 * screen: it has to be what you see when nothing is running.
 	 */
-	if (!wl_list_empty(&surfaces))
+	/* Nothing mapped: the desktop is what a compositor shows by itself.
+	 * wl_list_empty() is true in exactly that case - negating it drew the
+	 * home screen behind a window instead of in front of the desktop, and
+	 * with no client at all it drew nothing. */
+	if (wl_list_empty(&surfaces))
 		draw_home();
 
 	draw_osd();
@@ -1032,17 +1036,33 @@ static int pace_dispatch(void *data)
 	pace_armed = 0;
 
 	if (!drm.flip_pending) {
-		if (drmModePageFlip(drm.fd, drm.crtc_id,
-				   drm.fb[drm.scanout],
-				   DRM_MODE_PAGE_FLIP_EVENT,
-				   &drm.flip_event) == 0)
+		/*
+		 * Draw, then present.
+		 *
+		 * Re-presenting the buffer as it stands is only correct while
+		 * something else is deciding what goes in it. With no client
+		 * there are no commits, so repaint() would never run, and the
+		 * only thing ever drawn was the startup gradient - the home
+		 * screen, being what a compositor draws when nothing is
+		 * mapped, was never painted at all.
+		 *
+		 * repaint() draws and then flips, so this needs no separate
+		 * flip; a pending commit still takes priority.
+		 */
+		if (!pending_surface) {
+			repaint(NULL);
+		} else if (drmModePageFlip(drm.fd, drm.crtc_id,
+					   drm.fb[drm.scanout],
+					   DRM_MODE_PAGE_FLIP_EVENT,
+					   &drm.flip_event) == 0) {
 			drm.flip_pending = 1;
-		else
+		} else {
 			drm.n_flip_err++;
+		}
 	}
 
-	/* Always re-armed, including when the flip above failed: the panel
-	 * must keep being fed or it goes dark. */
+	/* Always re-armed, including when the repaint or flip above failed:
+	 * the panel must keep being fed or it goes dark. */
 	arm_keepalive();
 
 	/* A timer callback returning 0 is removed from the loop, and this
@@ -2184,12 +2204,6 @@ int main(void)
 	wl_event_loop_add_fd(loop, drm.fd, WL_EVENT_READABLE, on_drm_event,
 			     NULL);
 
-	/* Start the keep-alive chain here rather than waiting for the first
-	 * flip completion to start it: with no client there is no commit,
-	 * so nothing else ever arms the timer and the panel is never fed
-	 * again. */
-	arm_keepalive();
-
 	/* Android's SurfaceFlinger normally owns this. Once we take the
 	 * display the panel keeps whatever level it last had, 315 of 2047
 	 * on this phone, which reads as a dim screen rather than as a
@@ -2208,6 +2222,14 @@ int main(void)
 		drm_teardown();
 		return 1;
 	}
+
+	/*
+	 * Arm it here, after the timer exists - which is the whole point. Armed
+	 * one step earlier this tested a NULL handle and did nothing, and with
+	 * no client there is no commit to arm it later: repaint=0, frames=0,
+	 * and a bare gradient that nothing would ever redraw.
+	 */
+	arm_keepalive();
 
 	touch_fd = open(TOUCH_DEV, O_RDONLY | O_NONBLOCK);
 	read_touch_range(touch_fd);
