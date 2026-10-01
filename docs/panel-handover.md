@@ -236,20 +236,16 @@ or SurfaceFlinger comes up against a display nothing owns.
 
 ## What is still missing
 
-A working compositor configuration, and input. `weston` should start once
-invoked as above, but that is untested on device because the phone was
-disconnected before the argument was found. The next things to establish, in
-order:
+weston now runs on the panel with touch input, which is the whole of what was
+outstanding here. See [weston-on-phone.md](weston-on-phone.md) for how, and
+for the two things that were not obvious: the udev database is keyed
+`c<major>:<minor>` rather than `n<major>:<minor>`, and the renderer has to be
+pixman because SDE has no DRI_DRI2 for Mesa's GBM path.
 
-- Confirm weston starts and takes the panel.
-- Input. Nothing is passed through to the chroot but `/dev` and `/sys` right
-  now, and a bind-mounted `/dev` does include `/dev/input`, so touch should
-  already be visible. Worth checking, because without it phosh is unusable
-  however well the display works.
-- GPU. KGSL exposes no DRM node, so neither Mesa nor freedreno can see the
-  Adreno 619. Software rendering means llvmpipe, which is slow but adequate
-  to prove the stack. The test image in `kmsclaim` is a CPU dumb buffer for the
-  same reason.
+What remains is the GPU. KGSL exposes no DRM node, so neither Mesa nor
+freedreno can see the Adreno 619, and the desktop shell and on-screen keyboard
+need a few more X11 and pango libraries than the chroot has. Neither blocks a
+compositor on the screen.
 
 The EVDI driver is no longer needed for any of this and could be dropped, but
 it is harmless and already wired in, so it is not worth the churn right now.
