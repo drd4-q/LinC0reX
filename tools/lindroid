@@ -367,8 +367,40 @@ weston_ini() {
 	EOF
 }
 
+# The panel comes off Android with the backlight still where Android left it,
+# and on this phone that is 0. A compositor that takes the display and then
+# renders into an unlit panel is indistinguishable from one that renders
+# nothing: weston 10 started cleanly, reported the output as enabled, and the
+# screen stayed black until this was written by hand.
+#
+# lind does this itself in brightness_init(), which is why the home screen was
+# visible and weston's was not. The difference looked like a rendering failure
+# and was one missing sysfs write.
+#
+# Best effort. If the node is missing the compositor still runs.
+set_brightness_max() {
+	local dir=/sys/class/backlight/panel0-backlight max
+
+	[ -e "$dir/brightness" ] || {
+		warn "нет $dir/brightness - яркость не трогаю"
+		return 0
+	}
+
+	max=$(cat "$dir/max_brightness" 2>/dev/null)
+	[ -n "$max" ] || max=2047
+
+	if [ "$(cat "$dir/brightness" 2>/dev/null)" != "$max" ]; then
+		if echo "$max" > "$dir/brightness" 2>/dev/null; then
+			say "подсветка $max/$max"
+		else
+			warn "не записать яркость - экран может остаться тёмным"
+		fi
+	fi
+}
+
 start_weston() {
 	weston_ini
+	set_brightness_max
 
 	# fmtshim.so is only needed because SDE advertises a format twice and
 	# weston 10 asserts on it. See tools/fmtshim.c.
