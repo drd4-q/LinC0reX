@@ -1,7 +1,16 @@
-# vblank does not fire on this device, and what that rules out
+# vblank: not delivered, and then delivered
 
-The flickering, the frozen animation in weston, and the reason the obvious
-driver fix cannot be applied. All three come from one measurement.
+The flickering, the frozen animation in weston, and a driver fix that could not
+be applied. All three came from one measurement, and the fix turned out to be a
+device tree property rather than the code it was assumed to be.
+
+**This document was written twice.** The first version concluded that SDE's
+vblank interrupt does not fire on this device and that the flip patch was
+therefore impossible. That conclusion was correct as far as it went and wrong
+in its conclusion: the interrupt was not firing because the panel's TE was
+routed away from the DSI link, and fixing the routing made it fire at frame
+rate. The sections below are kept as written, with the correction at the end,
+because the path to the answer is more useful than the answer alone.
 
 ## The fix that seemed obvious
 
@@ -115,46 +124,127 @@ the only thing here that has ever displayed correctly.
 a callback that does not fire, no flip ever completes, and a compositor waiting
 for its first flip presents nothing.
 
-## Consequences
+## Correction: the interrupt was silent, not absent
 
-- **Do not complete page flips from SDE's vblank path on this device.** It cannot
-  work. The patch was reverted; the tree is back at `32770983e`.
-- **The flicker is not fixable by moving the notification.** The idea was right —
-  vblank is the correct instant, and the core recommends delivering from the
-  interrupt handler — but this driver does not deliver vblank, so there is no
-  correct instant available to deliver at.
-- **Any compositor that depends on accurate presentation timing will stall here.**
-  That is weston, and it would be sway, and it is not a lind defect. It is a
-  property of this kernel and this panel path.
+Every conclusion above rests on `vsync_event` not changing. That was taken to
+mean the callback never ran after the first time. It did run — just not
+usefully.
 
-## What would actually fix it
+The panel's TE never reached the driver at all. `sde_encoder_phys_cmd_init()`
+sets `has_intf_te` from the hardware catalog, which is true for DSI, so
+`INTR_IDX_RDPTR` is registered as:
 
-Not a one-line change. In rough order of size:
+```c
+    if (phys_enc->has_intf_te)
+            irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_RD_PTR;   /* from INTF */
+    else
+            irq->intr_type = SDE_IRQ_TYPE_PING_PONG_RD_PTR;   /* from PINGPONG */
+```
 
-1. **Make the RD_PTR interrupt deliver per frame.** Whatever stops it after the
-   first frame — idle-mode IRQ gating, `frame_trigger_count` bookkeeping in
-   `sde_encoder_phys_cmd_rd_ptr_irq()`, or the refcount asymmetry between
-   `drm_crtc_vblank_on()` (called from `sde_kms_vm_primary_prepare_commit()` on
-   every commit) and `drm_crtc_vblank_off()` (called only from
-   `sde_kms_vm_pre_release()`) — has to be found and fixed. That refcount
-   asymmetry is already suspicious: it grows by one per commit, and the only
-   decrement is on master release.
+And `dsi_setup_trigger_controls()` was configured to keep TE off the DSI link:
 
-2. **Use the DSI TE signal instead.** `phys_enc->has_intf_te` exists, and SDE
-   already waits on it for panels that need a frame before backlight. TE is a
-   per-frame hardware signal that is not the same thing as the RD_PTR interrupt
-   and may well still be live. This is the more promising route: it is the signal
-   that means "the panel has started reading this buffer".
+```c
+    if (cfg->te_mode == DSI_TE_ON_EXT_PIN)
+            reg |= BIT(31);      /* do not look for TE on the link */
+    else
+            reg &= ~BIT(31);
+```
 
-3. **Stop needing it.** A compositor that draws faster than the panel and never
-   changes a hard edge does not tear. This is a real option for a phone shell:
-   it is what `lind`'s home screen already does by not animating.
+`te_mode` came from the panel device tree, and the panel has no
+`qcom,mdss-dsi-te-pin-select`, so `dsi_panel_parse_host_config()` fell back to
+`1` — which is `DSI_TE_ON_EXT_PIN`. Across the 70 panels in this tree, 38 set
+`1` explicitly, **none** set `0`, and 32 say nothing and inherit the fallback.
+Nothing is ever routed from the link, so the INTF TE status is never set and the
+RD_PTR interrupt cannot fire.
+
+The GPIO in the panel's node, `tlmm 23`, is not an alternative path. Its handler
+says what it is for:
+
+```c
+    /*
+     * This irq handler is used for sole purpose of identifying
+     * ESD attacks on panel ...
+     */
+    complete_all(&display->esd_te_gate);
+```
+
+Two changes to the panel device tree, on both m17 panel nodes since Android's
+runtime choice between them is not observable from userspace:
+
+- `qcom,mdss-dsi-te-pin-select = <0>` — TE from the DSI link
+- DCS `0x35` (TEON) and `0x39` (TESCANLINE) in `qcom,mdss-dsi-post-panel-on-command`,
+  because nothing in the original `on-command` ever asked the panel to assert TE
+
+After that:
+
+    vsync_event:  +0.99..1.01 s per one-second read, tracking real time
+    /proc/interrupts  163: msm_drm  +363 over 3 s = 121.0/s
+
+121 interrupts per second is the panel's frame rate. The signal exists.
+
+### Two measurement errors worth keeping
+
+**Reading `vsync_event` cannot tell you the rate.** It publishes
+`ktime_get()` of the last callback, so it tracks real time whether the callback
+runs at 1 Hz or 120. An early conclusion here — that TE fired "about once a
+second" — was an artefact of sampling through `adb shell`, where each loop cost
+about a second rather than the 400 ms intended. The rate came from
+`/proc/interrupts`, and it is 121/s.
+
+**`sde_crtc.vblank_cb_count` would have answered it directly**, and it is
+already incremented in `sde_crtc_vblank_cb()`. It is simply not exposed; only
+the timestamp is.
+
+## Status
+
+The flip patch is re-applied, and it now has a bound on the wait it depends on.
+`msm_drm` has also been seen falling silent for stretches around mode changes,
+and `sde_crtc->event` is a single slot — a second mark would overwrite the first
+and the first client would never hear anything. So if a flip is still pending
+when the next commit lands, its vblank never came and the event is sent
+immediately. A client waits at most one extra frame instead of forever.
+
+weston still does not animate with vblank present. That is a separate problem:
+the signal is there and weston is not using it, which is a question about weston
+rather than about this driver.
+
+## What it took
+
+Kept from the original draft, with what actually happened marked. Worth having
+both, because the first two candidates were wrong guesses and the third was
+right.
+
+1. ~~Make the RD_PTR interrupt deliver per frame.~~ Wrong theory. Idle-mode IRQ
+   gating and the `frame_trigger_count` bookkeeping in
+   `sde_encoder_phys_cmd_rd_ptr_irq()` were not involved. The
+   `drm_crtc_vblank_on()` / `drm_crtc_vblank_off()` refcount asymmetry — the
+   former called from `sde_kms_vm_primary_prepare_commit()` on every commit, the
+   latter only from `sde_kms_vm_pre_release()` — is real but harmless here: an
+   inflated refcount keeps the interrupt enabled, which is what we want.
+
+2. ~~Use the DSI TE signal instead.~~ Right idea, wrong level. `has_intf_te`
+   already existed and SDE already used it; the signal was simply never routed
+   there. No code change was needed for this at all.
+
+3. **Ask the panel for TE, and read it from the right place.** One device tree
+   property and two DCS commands. See the correction above.
 
 ## Honest note on the mistake
 
-The patch was written from a reading of the code, built, and flashed without
-being able to test it on the target. The chain looked complete, so the missing
-piece was assumed to be a logic error rather than absent hardware delivery. It
-was the second kind, and one sysfs read would have said so before the flash.
+The first attempt at this patch was written from a reading of the code, built,
+and flashed with no way to test it on the target first. The chain looked
+complete, so the missing piece was assumed to be a logic error rather than a
+signal that never arrived. It was the second kind, and one sysfs read would have
+said so beforehand.
 
-Written with AI assistance (OpenCode / Claude).
+Worse, the conclusion drawn afterwards — "do not complete page flips from SDE's
+vblank path on this device, it cannot work" — was wrong, and was the kind of
+wrong that closes a door. The interrupt was silent because a device tree
+property was missing, not because the hardware could not produce it. Two
+properties and two DCS commands later it runs at 121 interrupts per second.
+
+The general lesson is not about device trees. It is that "this cannot be done"
+and "this is not being done" look identical from userspace, and the difference
+between them is one measurement. Making that measurement before writing the
+patch would have cost a minute. Making it after cost a flash, a black screen,
+and a conclusion that was confidently inverted.
