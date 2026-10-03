@@ -79,16 +79,47 @@ static int is_flip_done(uint32_t type)
 {
 	return type == DRM_EVENT_FLIP_COMPLETE || type == 0x04;
 }
+/*
+ * Only the header is declared here.
+ *
+ * A page-flip completion used to be modelled locally as
+ *
+ *	base + sequence + time + sequence_nr + reserved[4]      = 44 bytes
+ *
+ * which is the pre-4.10 layout and is simply wrong: the kernel sends 16.
+ * Nothing noticed for a long time because the handler read into that struct
+ * once per poll and only ever looked at base.type - the extra bytes were
+ * harmless while a poll delivered exactly one event. As soon as the handler
+ * started sizing packets with sizeof, the stream desynchronised, event types
+ * came out as 317, and the compositor aborted in free().
+ *
+ * The kernel writes the real length into base.length for every event it
+ * queues, so packets are now sized from the header and no local copy of any
+ * event layout is needed. drm_event is declared to match
+ * include/uapi/drm/drm.h, which is two u32 - type and length - and this
+ * kernel's header does have length, so that part was right all along.
+ */
 struct drm_event_compat {
 	int type;
 	int length;
 };
+
+/*
+ * Out-parameter for drmModePageFlip() only.
+ *
+ * 16 bytes: the kernel's own layout, base plus sequence, tv_sec, tv_usec. The
+ * libdrm in this chroot declares the type incompletely, so it is spelled out
+ * here; the copy that used to live here was 44 bytes and belonged to a kernel
+ * generation that has not existed for a decade.
+ *
+ * Nothing sizes a packet from sizeof(this). The kernel writes every event's
+ * true size into base.length, and that is what the reader uses.
+ */
 struct drm_mode_page_flip_event {
 	struct drm_event_compat base;
-	uint64_t sequence;
-	uint64_t time;
-	uint32_t sequence_nr;
-	uint32_t reserved[4];
+	uint32_t sequence;
+	uint32_t tv_sec;
+	uint32_t tv_usec;
 };
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -100,6 +131,25 @@ struct drm_mode_page_flip_event {
 #define SOCKET_NAME "wayland-0"
 
 #define CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
+
+/*
+ * Has anything changed since the last repaint?
+ *
+ * The keep-alive has to keep the flip pipeline moving even when there is
+ * nothing new to draw, but repainting is not free: fill_background(), then a
+ * full-panel desktop with FreeType text and antialiased rounded rectangles, at
+ * 1080x2400, twenty to a hundred times a second. Measured at 80% of a core for
+ * a home screen that had not changed since it was drawn.
+ *
+ * That is also a plausible reason touch felt unreliable: a compositor spending
+ * four fifths of a core on a byte-identical frame has little left for the
+ * input path, and the symptom - touch sometimes arriving, sometimes not - is
+ * what a starved loop looks like from the outside.
+ *
+ * So the keep-alive presents the buffer already in memory, and repaints only
+ * when something asked for it.
+ */
+static int ui_dirty = 1;
 
 static uint32_t shm_formats[] = {
 	WL_SHM_FORMAT_XRGB8888,
@@ -164,7 +214,7 @@ static struct {
 
 	unsigned long n_repaint, n_frames, n_commits;
 	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
-	unsigned long n_vblank, n_seq_err;
+	unsigned long n_vblank, n_seq_err, n_touch;
 } drm;
 
 /* --- text ----------------------------------------------------------------
@@ -816,6 +866,7 @@ static int inside_popup(int px, int py)
 /* Dismiss the popup: popup_done, then the resource goes away. */
 static void dismiss_popup(void)
 {
+	ui_dirty = 1;
 	struct surface *s = the_popup;
 
 	if (!s)
@@ -870,6 +921,7 @@ static struct wl_list pointers;
  */
 static int64_t ev_last_us;
 static void arm_keepalive(void);
+
 static struct surface *pending_surface;
 static struct surface *flip_surface;
 static struct wl_event_source *pace_timer;
@@ -951,6 +1003,7 @@ static void repaint(struct surface *dirty)
 {
 	struct surface *s;
 
+	ui_dirty = 0;
 	fill_background();
 
 	/* Two passes: a popup belongs above every toplevel, and the surface
@@ -1029,6 +1082,7 @@ static void repaint(struct surface *dirty)
  */
 static void maybe_present(struct surface *s)
 {
+	ui_dirty = 1;
 	if (drm.flip_pending) {
 		pending_surface = s;
 		return;
@@ -1132,11 +1186,9 @@ static void handle_event(const char *buf)
 	/* is_flip_done rather than a case label, so the 0x04 name newer
 	 * kernels use keeps working - see its comment. */
 	if (is_flip_done(hdr->type)) {
-		struct drm_mode_page_flip_event ev;
 		struct surface *s;
 
-		memcpy(&ev, buf, sizeof ev);
-		log_event(ev.base.type, "flip done");
+		log_event(hdr->type, "flip done");
 
 		s = flip_surface;
 		flip_surface = NULL;
@@ -1206,42 +1258,50 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 	(void)mask;
 	(void)data;
 
-	for (;;) {
-		/* Enough for a header to tell us the packet size? */
-		if (have < sizeof(struct drm_event)) {
-			n = read(fd, buf + have, sizeof buf - have);
-			if (n < 0) {
-				if (errno != EAGAIN)
-					drm.n_read_err++;
-				return 0;
-			}
-			if (n == 0)
-				return 0;
-
-			have += (size_t)n;
-			continue;
+	/*
+	 * One read per callback, then drain only what that read returned.
+	 *
+	 * Reading again inside the loop is unbounded, and with a vblank armed
+	 * at 120 Hz it does not terminate in practice: events arrive as fast
+	 * as they are consumed, so have never reaches zero, this function never
+	 * returns, and epoll never services the touch device. Measured as lind
+	 * at 70% CPU in state R with the screen unresponsive to touch, and the
+	 * flip interval stretched from 8.3 ms to 67 ms by the time the events
+	 * behind each flip finally got drained.
+	 *
+	 * Draining a buffer that is already in hand is bounded - it is at most
+	 * sizeof buf bytes - and anything still queued keeps the fd readable,
+	 * so it comes back here. That is the whole reason for the bound.
+	 */
+	if (have == 0) {
+		n = read(fd, buf, sizeof buf);
+		if (n < 0) {
+			if (errno != EAGAIN)
+				drm.n_read_err++;
+			return 0;
 		}
+		if (n == 0)
+			return 0;
 
-		need = is_flip_done(hdr->type) ?
-		       sizeof(struct drm_mode_page_flip_event) :
-		       sizeof(struct drm_event_crtc_sequence);
+		have = (size_t)n;
+	}
 
-		if (need > sizeof buf)
-			need = sizeof buf;
+	while (have >= sizeof(struct drm_event)) {
+		/*
+		 * Size from the header. The kernel stamps base.length with the
+		 * real size of every event it queues, so there is nothing to
+		 * hardcode and nothing to get wrong per event type.
+		 */
+		need = (size_t)hdr->length;
 
-		if (have < need) {
-			n = read(fd, buf + have, sizeof buf - have);
-			if (n < 0) {
-				if (errno != EAGAIN)
-					drm.n_read_err++;
-				return 0;
-			}
-			if (n == 0)
-				return 0;
+		if (need < sizeof(struct drm_event) || need > sizeof buf)
+			need = is_flip_done(hdr->type) ?
+			       sizeof(struct drm_event) :
+			       sizeof(struct drm_event_crtc_sequence);
 
-			have += (size_t)n;
-			continue;
-		}
+		/* A packet split across reads. Keep the remainder for next time. */
+		if (have < need)
+			break;
 
 		drm.n_events++;
 		handle_event(buf);
@@ -1249,12 +1309,41 @@ static int on_drm_event(int fd, uint32_t mask, void *data)
 		have -= need;
 		if (have)
 			memmove(buf, buf + need, have);
-
-		/* Keep draining what is already buffered before waiting for the
-		 * fd to become readable again. */
-		if (!have)
-			return 0;
 	}
+
+	/* Less than a header cannot be the start of anything usable, and
+	 * resynchronising here beats waiting for bytes that would decode as
+	 * garbage. */
+	if (have && have < sizeof(struct drm_event))
+		have = 0;
+
+	/* Counters once a second, printed from here rather than from a timer:
+	 * a timer only fires if the loop goes idle, which is the thing in
+	 * doubt. If this line stops appearing, the loop is not returning here
+	 * at all. */
+	{
+		static struct timespec stat_at;
+		struct timespec now;
+
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (!stat_at.tv_sec ||
+		    (now.tv_sec - stat_at.tv_sec) >= 1) {
+			unsigned long el = stat_at.tv_sec ?
+				(unsigned long)(now.tv_sec - stat_at.tv_sec) :
+				0;
+
+			fprintf(stderr,
+				"lind: STAT +%lus событий=%lu vblank=%lu "
+				"кадров=%lu тач=%lu dirty=%d pend=%d "
+				"ошибок=%lu/%lu\n",
+				el, drm.n_events, drm.n_vblank, drm.n_frames,
+				drm.n_touch, ui_dirty, pending_surface ? 1 : 0,
+				drm.n_read_err, drm.n_seq_err);
+			stat_at = now;
+		}
+	}
+
+	return 0;
 }
 
 /* Repaint, then release the client waiting on this frame. */
@@ -1302,8 +1391,31 @@ static int pace_dispatch(void *data)
 		 * repaint() draws and then flips, so this needs no separate
 		 * flip; a pending commit still takes priority.
 		 */
+		/*
+		 * Three cases, one action each.
+		 *
+		 * A client commit is already handled above; what is left is
+		 * what to do with an idle compositor.
+		 *
+		 * If nothing has changed, do nothing. The panel keeps scanning
+		 * out the frame it already has, so there is nothing to feed it,
+		 * and flipping anyway would swap to the other buffer - which,
+		 * on a static screen, has not been painted since the last
+		 * change and holds whatever was in the allocation. That is
+		 * garbage on screen, and it looked like lag rather than like a
+		 * bug, which is why it is worth writing down.
+		 *
+		 * If something changed, repaint; repaint() ends in its own
+		 * flip.
+		 *
+		 * Ping-pong note: only the buffer being drawn into is ever
+		 * painted, so "flip without repainting" is only safe once both
+		 * buffers have held the same image at least once. Not flipping
+		 * avoids needing that.
+		 */
 		if (!pending_surface) {
-			repaint(NULL);
+			if (ui_dirty)
+				repaint(NULL);
 		} else if (drmModePageFlip(drm.fd, drm.crtc_id,
 					   drm.fb[drm.scanout],
 					   DRM_MODE_PAGE_FLIP_EVENT,
@@ -1824,6 +1936,7 @@ static int read_touch(int fd, uint32_t mask, void *data)
 	for (n = 0; n < EV_BATCH; n++) {
 		if (read(fd, &ev, sizeof(ev)) != sizeof(ev))
 			break;
+		drm.n_touch++;
 		if (ev.type == EV_ABS) {
 			ts.have_abs = 1;
 			switch (ev.code) {
@@ -2336,6 +2449,7 @@ static void xdg_surface_get_popup(struct wl_client *c, struct wl_resource *r,
 		return;
 	wl_resource_set_implementation(pop, &popup_impl, s, NULL);
 
+	ui_dirty = 1;
 	s->xdg_popup = pop;
 	s->is_popup = 1;
 	s->role = ROLE_POPUP;
