@@ -136,8 +136,35 @@ static struct {
 	int flip_pending;
 	struct drm_mode_page_flip_event flip_event;
 
+	/*
+	 * Vblank, armed and kept armed.
+	 *
+	 * Without this the driver never interrupts on frame boundaries, and
+	 * that is not a driver fault. drm_crtc_vblank_on() in this kernel
+	 * calls no driver hook at all:
+	 *
+	 *	if (atomic_read(&vblank->refcount) != 0 || drm_vblank_offdelay == 0)
+	 *		WARN_ON(drm_vblank_enable(dev, pipe));
+	 *
+	 * The reference count is taken in exactly one place,
+	 * drm_crtc_send_vblank_event(), which runs when a client asks for a
+	 * VBLANK or CRTC_SEQUENCE event. So a client that only page-flips and
+	 * arms nothing gets no vblank interrupts - measured on this phone:
+	 * msm_drm at 121 interrupts/s under Android and under weston, both of
+	 * which arm sequence events, and sde_crtc_vblank_cb() completely silent
+	 * under lind, which did not.
+	 *
+	 * That matters twice over. It is why a page flip whose completion is
+	 * reported from the vblank interrupt never completes here, and it is
+	 * also why lind used to guess when a frame was safe to start drawing.
+	 * Asking the panel is both correct and necessary.
+	 */
+	uint64_t vbl_seq;
+	int vbl_armed;
+
 	unsigned long n_repaint, n_frames, n_commits;
 	unsigned long n_events, n_flip_err, n_dropped, n_read_err;
+	unsigned long n_vblank, n_seq_err;
 } drm;
 
 /* --- text ----------------------------------------------------------------
@@ -1012,66 +1039,222 @@ static void maybe_present(struct surface *s)
 }
 
 /*
+ * vblank_arm - ask for one more CRTC_SEQUENCE event, and keep asking.
+ *
+ * This is what turns the driver's frame-boundary interrupt on; see the comment
+ * on drm.vbl_seq. Re-armed from the event handler as each one arrives, so a
+ * reference is always outstanding and the interrupts stay enabled.
+ *
+ * The sequence number is absolute and incremented here, not
+ * DRM_CRTC_SEQUENCE_RELATIVE. Relative with a stale counter was tried and is a
+ * trap: asked for a sequence already passed, the kernel delivers it
+ * immediately, the event handler re-arms, and the loop turns into a pump -
+ * measured at 500,000 events per second, with the compositor burning a core
+ * delivering events nobody asked for.
+ *
+ * DRM_CRTC_SEQUENCE_NEXT_ON_MISS keeps a late re-arm from stalling forever: if
+ * the target sequence has already gone by, the next one is used instead of
+ * returning an error and leaving vblank permanently disarmed.
+ */
+static void vblank_arm(void)
+{
+	struct drm_crtc_queue_sequence q;
+
+	if (!drm.mode_set)
+		return;
+
+	memset(&q, 0, sizeof q);
+	q.crtc_id = drm.crtc_id;
+	q.flags = DRM_CRTC_SEQUENCE_NEXT_ON_MISS;
+	q.sequence = ++drm.vbl_seq;
+	q.user_data = 0;
+
+	if (drmIoctl(drm.fd, DRM_IOCTL_CRTC_QUEUE_SEQUENCE, &q) < 0) {
+		drm.n_seq_err++;
+		/* No sequence is armed, so no vblank reference is held and the
+		 * driver interrupts are off. Say so once rather than per frame. */
+		if (drm.n_seq_err == 1)
+			fprintf(stderr,
+				"lind: не вооружить vblank (%s) - прерывания "
+				"границы кадра останутся выключены\n",
+				strerror(errno));
+		return;
+	}
+
+	/* The kernel rewrites sequence with the one it actually picked. */
+	drm.vbl_seq = q.sequence;
+	drm.vbl_armed = 1;
+}
+
+/*
  * The DRM fd is readable when a flip completes. The event type is logged for
  * the first few: "no event" and "an event of some other type" look identical
  * from a frame counter, and that ambiguity cost real time once already.
  */
+static void log_event(int type, const char *what)
+{
+	struct timespec ts;
+	static unsigned long seen_flip, seen_seq, seen_other;
+
+	unsigned long *n = type == DRM_EVENT_FLIP_COMPLETE ? &seen_flip :
+			   type == DRM_EVENT_CRTC_SEQUENCE  ? &seen_seq :
+							     &seen_other;
+
+	if (++*n > 8)
+		return;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+
+	if (ev_last_us)
+		fprintf(stderr, "lind: %s #%lu +%lld us (type=%d)\n", what, *n,
+			(long long)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000 -
+				    ev_last_us), type);
+	else
+		fprintf(stderr, "lind: %s #%lu (type=%d)\n", what, *n, type);
+
+	ev_last_us = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+/*
+ * One DRM event, dispatched by type.
+ *
+ * The event fd is a packet stream and the packets differ in size - a flip
+ * completion is 16 bytes, a CRTC_SEQUENCE 24 - so the header decides how many
+ * bytes to consume. Reading a fixed struct instead truncates the bigger packet
+ * and every event after it is decoded at the wrong offset; that shows up as
+ * nonsense event types rather than as a parse error, which is why it is worth
+ * spelling out.
+ */
+static void handle_event(const char *buf)
+{
+	struct drm_event *hdr = (struct drm_event *)buf;
+
+	/* is_flip_done rather than a case label, so the 0x04 name newer
+	 * kernels use keeps working - see its comment. */
+	if (is_flip_done(hdr->type)) {
+		struct drm_mode_page_flip_event ev;
+		struct surface *s;
+
+		memcpy(&ev, buf, sizeof ev);
+		log_event(ev.base.type, "flip done");
+
+		s = flip_surface;
+		flip_surface = NULL;
+		drm.scanout = drm.render;
+		drm.render = 1 - drm.render;
+		drm.flip_pending = 0;
+		drm.n_frames++;
+
+		if (s)
+			send_frame_callbacks(s);
+
+		/* The completion is the clock. Take the next frame straight away
+		 * rather than waiting on a timer that does not agree with the
+		 * panel. */
+		if (pending_surface)
+			maybe_present(pending_surface);
+		else
+			arm_keepalive();
+		return;
+	}
+
+	switch (hdr->type) {
+	case DRM_EVENT_CRTC_SEQUENCE: {
+		struct drm_event_crtc_sequence q;
+
+		memcpy(&q, buf, sizeof q);
+		log_event(q.base.type, "vblank seq");
+		drm.n_vblank++;
+		drm.vbl_seq = q.sequence;
+
+		/* Re-arm at once: the reference this event was holding is
+		 * released when it is delivered, and the driver's interrupts go
+		 * with it. */
+		vblank_arm();
+		break;
+	}
+
+	case DRM_EVENT_VBLANK:
+		log_event(hdr->type, "vblank");
+		drm.n_vblank++;
+		vblank_arm();
+		break;
+
+	default:
+		log_event(hdr->type, "other");
+		break;
+	}
+}
+
+/*
+ * The DRM fd is readable when the driver has something to say.
+ *
+ * Draining is a loop, not a single read. One read returns whatever has
+ * accumulated, which with a 120 Hz vblank armed is regularly two events - and
+ * returning after the first leaves the second sitting in a buffer the fd will
+ * never make readable again. That is how type=317 turns up: the leftover is
+ * eventually decoded starting at the wrong offset.
+ */
 static int on_drm_event(int fd, uint32_t mask, void *data)
 {
-	struct drm_mode_page_flip_event ev;
-	struct surface *s;
-	int n;
+	static char buf[256];
+	static size_t have;
+	struct drm_event *hdr = (struct drm_event *)buf;
+	size_t need;
+	ssize_t n;
 
 	(void)mask;
 	(void)data;
 
-	n = read(fd, &ev, sizeof(ev));
-	if (n <= 0) {
-		if (n < 0 && errno != EAGAIN)
-			drm.n_read_err++;
-		return 0;
+	for (;;) {
+		/* Enough for a header to tell us the packet size? */
+		if (have < sizeof(struct drm_event)) {
+			n = read(fd, buf + have, sizeof buf - have);
+			if (n < 0) {
+				if (errno != EAGAIN)
+					drm.n_read_err++;
+				return 0;
+			}
+			if (n == 0)
+				return 0;
+
+			have += (size_t)n;
+			continue;
+		}
+
+		need = is_flip_done(hdr->type) ?
+		       sizeof(struct drm_mode_page_flip_event) :
+		       sizeof(struct drm_event_crtc_sequence);
+
+		if (need > sizeof buf)
+			need = sizeof buf;
+
+		if (have < need) {
+			n = read(fd, buf + have, sizeof buf - have);
+			if (n < 0) {
+				if (errno != EAGAIN)
+					drm.n_read_err++;
+				return 0;
+			}
+			if (n == 0)
+				return 0;
+
+			have += (size_t)n;
+			continue;
+		}
+
+		drm.n_events++;
+		handle_event(buf);
+
+		have -= need;
+		if (have)
+			memmove(buf, buf + need, have);
+
+		/* Keep draining what is already buffered before waiting for the
+		 * fd to become readable again. */
+		if (!have)
+			return 0;
 	}
-
-	drm.n_events++;
-	if (drm.n_events <= 8) {
-		struct timespec ts;
-
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		if (ev_last_us)
-			fprintf(stderr,
-				"lind: flip done #%lu +%lld us (type=%d)\n",
-				drm.n_events,
-				(long long)(ts.tv_sec * 1000000 +
-					    ts.tv_nsec / 1000 - ev_last_us),
-				ev.base.type);
-		else
-			fprintf(stderr, "lind: flip done #1 (type=%d)\n",
-				ev.base.type);
-		ev_last_us = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-	}
-
-	if (!is_flip_done(ev.base.type))
-		return 0;
-
-	s = flip_surface;
-	flip_surface = NULL;
-	drm.scanout = drm.render;
-	drm.render = 1 - drm.render;
-	drm.flip_pending = 0;
-	drm.n_frames++;
-
-	if (s)
-		send_frame_callbacks(s);
-
-	/* The completion is the clock. Take the next frame straight away
-	 * rather than waiting on a timer that does not agree with the
-	 * panel. */
-	if (pending_surface)
-		maybe_present(pending_surface);
-	else
-		arm_keepalive();
-
-	return 0;
 }
 
 /* Repaint, then release the client waiting on this frame. */
@@ -2500,7 +2683,21 @@ static int drm_setup(void)
 	drmModeConnector *conn = NULL;
 	int i;
 
-	drm.fd = open(CARD, O_RDWR | O_CLOEXEC);
+	/*
+	 * O_NONBLOCK is load-bearing, not tidiness.
+	 *
+	 * The DRM event fd is a packet stream, so the handler has to come back
+	 * for the rest of a packet it has only half read. On a blocking fd that
+	 * second read waits inside the event loop - and if the stream has
+	 * desynchronised, or no further events are coming because the
+	 * compositor has stopped presenting, it waits forever. The whole
+	 * compositor then stops: the screen freezes and touch dies with it,
+	 * which is exactly what it looks like from the outside.
+	 *
+	 * It used to be safe to leave this blocking only because the handler
+	 * read once per poll, and poll had already promised data.
+	 */
+	drm.fd = open(CARD, O_RDWR | O_CLOEXEC | O_NONBLOCK);
 	if (drm.fd < 0) {
 		fprintf(stderr, "lind: open %s: %s\n", CARD, strerror(errno));
 		return -1;
@@ -2582,6 +2779,13 @@ static int drm_setup(void)
 		goto fail;
 	}
 	drm.mode_set = 1;
+
+	/* Armed here, before anything else, so the driver has a vblank
+	 * reference from the first moment and its frame-boundary interrupt is
+	 * live before the first page flip is asked for. Arming later leaves a
+	 * window where a flip can complete with nothing watching. */
+	vblank_arm();
+
 	printf("lind: режим установлен, буфер отображения готов\n");
 
 	drmModeFreeConnector(conn);
