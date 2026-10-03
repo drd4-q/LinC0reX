@@ -279,15 +279,27 @@ gradient looks like the gradient — and became obvious the moment a hard-edged 
 was drawn across the top. Bisected with `LIND_NOPANEL`: without the top bar the
 animation does not flicker; with it, it does. The fix is one line of driver work.
 
-**No GPU.** KGSL exposes no DRM node, so Mesa and freedreno cannot see the
-Adreno 619. Everything is software rendered, and a full frame must fit in one
+**No GPU, and it is measured, not assumed.** The DRM node works: it allocates,
+maps and writes buffers. But it is `msm_drm` 1.4.0 — SDE, the display driver.
+KGSL is a separate module (`msm_kgsl.ko`) that is not a DRM driver, so it
+registers no DRM node and answers no ioctl. Nothing in userspace reaches the
+Adreno through DRM, and Mesa would find no GL driver and fall back to software.
+
+This is why `wl_drm` and `linux-dmabuf` are *not* on the to-do list: handing a
+card fd to a client would buy a CPU memory buffer with extra steps. See
+[`docs/gpu-path.md`](docs/gpu-path.md) — including the first run of that
+measurement, which produced the opposite answer because the probe used the
+wrong struct for the dumb-buffer ioctl.
+
+Everything is therefore software rendered, and a full frame must fit in one
 refresh period or it tears — measured at 31 fps against a 120 Hz panel for a
 banded renderer that could not be made to fit.
 
 **Not a usable phone shell.** Menus work, so `xdg_popup` is no longer the
 blocker — `xdg_decoration` and `wp_viewporter` are, and every surface is
-fullscreen. `phosh` will not run. `weston-terminal` needs more X11 and pango
-libraries than the chroot has.
+fullscreen. `phosh` cannot run here at all, and not for want of a protocol:
+Qt Quick needs a GPU buffer path that this kernel does not expose to userspace.
+`weston-terminal` needs more X11 and pango libraries than the chroot has.
 
 **Android's input may not come back by itself.** Stopping SurfaceFlinger takes
 the input pipeline with it, and it does not always recover. The device is not
@@ -306,6 +318,7 @@ reliable fix.
 | [docs/weston-on-phone.md](docs/weston-on-phone.md) | what weston does on this hardware |
 | [docs/home-screen.md](docs/home-screen.md) | the desktop, and Phosh's geometry |
 | [docs/xdg-popup.md](docs/xdg-popup.md) | menus, and why a missing line in a table read as "popups don't work" |
+| [docs/gpu-path.md](docs/gpu-path.md) | the GPU is unreachable, measured — and why `wl_drm` is off the list |
 | [docs/page-flip-root-cause.md](docs/page-flip-root-cause.md) | **read this one** — the flip investigation, including the conclusion that was wrong |
 
 ---
