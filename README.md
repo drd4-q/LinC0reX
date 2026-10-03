@@ -159,8 +159,11 @@ panel is 1080 px wide — 360 dp at a density of exactly 3 — so every value is
 
 What is ported is the arithmetic and the interaction model. The QML is not, and
 cannot be: it is executed by Qt Quick at runtime, and Qt Quick needs a GPU buffer
-path (`wl_drm` or `linux-dmabuf`, `wp_viewporter`, `xdg_popup`, `xdg_decoration`,
-EGL) that `lind` does not implement.
+path (`wl_drm` or `linux-dmabuf`, `wp_viewporter`, `xdg_decoration`, EGL) that
+`lind` does not implement. Menus do work — `xdg_popup` is implemented, including
+`xdg_positioner` and the on-screen constraint that a menu hanging off the top
+edge would otherwise never be seen; see [`docs/xdg-popup.md`](docs/xdg-popup.md)
+for what that gap actually was.
 
 Apps come from `/usr/share/lindroid/apps`, one per line:
 
@@ -281,8 +284,9 @@ Adreno 619. Everything is software rendered, and a full frame must fit in one
 refresh period or it tears — measured at 31 fps against a 120 Hz panel for a
 banded renderer that could not be made to fit.
 
-**Not a usable phone shell.** `xdg_popup` is not implemented, so menus do not
-work, and `phosh` will not run. `weston-terminal` needs more X11 and pango
+**Not a usable phone shell.** Menus work, so `xdg_popup` is no longer the
+blocker — `xdg_decoration` and `wp_viewporter` are, and every surface is
+fullscreen. `phosh` will not run. `weston-terminal` needs more X11 and pango
 libraries than the chroot has.
 
 **Android's input may not come back by itself.** Stopping SurfaceFlinger takes
@@ -301,6 +305,7 @@ reliable fix.
 | [docs/display-control.md](docs/display-control.md) | the ioctl interface |
 | [docs/weston-on-phone.md](docs/weston-on-phone.md) | what weston does on this hardware |
 | [docs/home-screen.md](docs/home-screen.md) | the desktop, and Phosh's geometry |
+| [docs/xdg-popup.md](docs/xdg-popup.md) | menus, and why a missing line in a table read as "popups don't work" |
 | [docs/page-flip-root-cause.md](docs/page-flip-root-cause.md) | **read this one** — the flip investigation, including the conclusion that was wrong |
 
 ---

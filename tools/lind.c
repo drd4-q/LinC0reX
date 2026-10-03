@@ -99,6 +99,8 @@ struct drm_mode_page_flip_event {
 #define RUNTIME_DIR "/run/user/0"
 #define SOCKET_NAME "wayland-0"
 
+#define CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
+
 static uint32_t shm_formats[] = {
 	WL_SHM_FORMAT_XRGB8888,
 	WL_SHM_FORMAT_ARGB8888,
@@ -723,6 +725,7 @@ static void draw_osd(void)
 enum surface_role {
 	ROLE_NONE,
 	ROLE_TOPLEVEL,
+	ROLE_POPUP,
 };
 
 struct surface {
@@ -734,11 +737,22 @@ struct surface {
 	 * surface keeps both. A toplevel needs an initial configure before
 	 * the client is allowed to map, so the toplevel resource is kept too. */
 	struct wl_resource *xdg_surface, *xdg_toplevel;
+	/* A popup is drawn above every toplevel and is dismissed by a tap that
+	 * lands outside it. One at a time: nesting menus is a later problem
+	 * than having menus. */
+	struct wl_resource *xdg_popup, *popup_parent;
+	int is_popup, popup_configured;
+	/* Where the popup sits on the panel, in pixels. Kept on the surface
+	 * rather than recomputed per frame because three places need it:
+	 * the configure we send, the blit, and the hit test that decides
+	 * whether a tap landed inside the menu or dismissed it. */
+	int popup_x, popup_y, popup_w, popup_h;
 	int fullscreen_requested;
 	enum surface_role role;
 	int32_t width, height;
 	int has_buffer;
 };
+
 
 struct shm_buffer {
 	void *pool_data;
@@ -747,6 +761,54 @@ struct shm_buffer {
 	uint32_t format;
 	struct wl_resource *resource;
 };
+
+static struct surface *the_popup;
+
+static int inside_popup(int px, int py)
+{
+	struct surface *s = the_popup;
+	int w, h;
+
+	if (!s || !s->current_buffer)
+		return 0;
+	{
+		struct shm_buffer *b = wl_resource_get_user_data(s->current_buffer);
+
+		if (!b)
+			return 0;
+		w = b->width;
+		h = b->height;
+	}
+	/* Measured from the popup's own corner, not the panel's: a menu in
+	 * the middle of the screen must swallow taps inside itself and let
+	 * everything else through, or it dismisses the instant it is used. */
+	return px >= s->popup_x && py >= s->popup_y &&
+	       px < s->popup_x + w && py < s->popup_y + h;
+}
+
+/* Dismiss the popup: popup_done, then the resource goes away. */
+static void dismiss_popup(void)
+{
+	struct surface *s = the_popup;
+
+	if (!s)
+		return;
+	the_popup = NULL;
+	if (s->xdg_popup) {
+		xdg_popup_send_popup_done(s->xdg_popup);
+		wl_resource_destroy(s->xdg_popup);
+		s->xdg_popup = NULL;
+	}
+	s->is_popup = 0;
+	s->popup_configured = 0;
+	s->popup_x = s->popup_y = s->popup_w = s->popup_h = 0;
+	s->role = ROLE_NONE;
+	if (s->current_buffer) {
+		wl_resource_destroy(s->current_buffer);
+		s->current_buffer = NULL;
+	}
+	s->has_buffer = 0;
+}
 
 struct shm_pool {
 	int fd;
@@ -864,16 +926,24 @@ static void repaint(struct surface *dirty)
 
 	fill_background();
 
-	wl_list_for_each(s, &surfaces, link) {
-		struct shm_buffer *b;
+	/* Two passes: a popup belongs above every toplevel, and the surface
+	 * list is in creation order, not stacking order. */
+	for (int pass = 0; pass < 2; pass++) {
+		wl_list_for_each(s, &surfaces, link) {
+			struct shm_buffer *b;
 
-		if (!s->current_buffer)
-			continue;
-		b = wl_resource_get_user_data(s->current_buffer);
-		if (!b)
-			continue;
-		blit_shm((char *)b->pool_data + b->offset, b->stride,
-			 b->width, b->height, 0, 0);
+			if (!s->current_buffer)
+				continue;
+			if (s->is_popup != pass)
+				continue;
+			b = wl_resource_get_user_data(s->current_buffer);
+			if (!b)
+				continue;
+			blit_shm((char *)b->pool_data + b->offset, b->stride,
+				 b->width, b->height,
+				 s->is_popup ? s->popup_x : 0,
+				 s->is_popup ? s->popup_y : 0);
+		}
 	}
 
 	brightness_flush();
@@ -1306,6 +1376,30 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r)
 		s->current_buffer = s->pending_buffer;
 		s->pending_buffer = NULL;
 		s->has_buffer = s->current_buffer != NULL;
+
+		/* A popup is configured once, with the size it asked for. A
+		 * client will not draw until it has seen this. */
+		if (s->is_popup && s->has_buffer && !s->popup_configured &&
+		    s->xdg_popup) {
+			struct shm_buffer *b =
+				wl_resource_get_user_data(s->current_buffer);
+
+			if (b) {
+				/* The size is the client's own, and the position is
+				 * the one it computed from its positioner: a
+				 * compositor that answers with 0,0 makes the
+				 * client lay itself out in the corner. The
+				 * buffer is only used to learn that the client
+				 * has actually drawn something. */
+				xdg_popup_send_configure(s->xdg_popup, s->popup_x,
+							 s->popup_y,
+							 s->popup_w ? s->popup_w
+									   : b->width,
+							 s->popup_h ? s->popup_h
+									   : b->height);
+				s->popup_configured = 1;
+			}
+		}
 		if (s->current_buffer) {
 			b = wl_resource_get_user_data(s->current_buffer);
 			s->width = b ? b->width : 0;
@@ -1646,7 +1740,11 @@ static int read_touch(int fd, uint32_t mask, void *data)
 					send_pointer(WL_POINTER_BUTTON,
 						     BTN_LEFT,
 						     WL_POINTER_BUTTON_STATE_RELEASED);
-					if (wl_list_empty(&surfaces)) {
+					if (the_popup) {
+						if (!inside_popup((int)last_x,
+								  (int)last_y))
+							dismiss_popup();
+					} else if (wl_list_empty(&surfaces)) {
 						int idx = tile_at((int)last_x,
 								  (int)last_y);
 
@@ -1840,13 +1938,269 @@ static void xdg_surface_get_toplevel(struct wl_client *c, struct wl_resource *r,
 	}
 }
 
+static void popup_destroy(struct wl_client *c, struct wl_resource *r)
+{
+	struct surface *s = wl_resource_get_user_data(r);
+
+	(void)c;
+	if (s && s->xdg_popup == r) {
+		if (the_popup == s)
+			the_popup = NULL;
+		s->xdg_popup = NULL;
+		s->is_popup = 0;
+		s->role = ROLE_NONE;
+	}
+}
+
+/*
+ * An input grab is optional for a client to request and we do not need it:
+ * every click outside dismisses the popup anyway, which is the behaviour the
+ * grab exists to provide. Ignoring it is safe because we are the only client on
+ * this display.
+ */
+static void popup_grab(struct wl_client *c, struct wl_resource *r,
+		       struct wl_resource *seat, uint32_t serial)
+{
+	(void)c; (void)r; (void)seat; (void)serial;
+}
+
+/* Repositioning is answered by configuring again, which is all a client waits
+ * for before it redraws. */
+static void popup_reposition(struct wl_client *c, struct wl_resource *r,
+			     struct wl_resource *positioner, uint32_t token)
+{
+	struct surface *s = wl_resource_get_user_data(r);
+
+	(void)c; (void)positioner;
+	if (!s || !s->xdg_popup)
+		return;
+
+	if (s->current_buffer) {
+		struct shm_buffer *b = wl_resource_get_user_data(s->current_buffer);
+
+		xdg_popup_send_configure(s->xdg_popup, 0, 0,
+					 b ? b->width : 0,
+					 b ? b->height : 0);
+	} else {
+		xdg_popup_send_configure(s->xdg_popup, 0, 0, 0, 0);
+	}
+	/* No xdg_wm_base.done. It exists to close the initial burst of
+	 * configures, and this compositor never sends one, so there is nothing
+	 * to close - and the generated header here does not have it either,
+	 * being older than the rest of the protocol. A client waiting for
+	 * reposition waits on xdg_popup.repositioned, which is sent. */
+}
+
+static const struct xdg_popup_interface popup_impl = {
+	.destroy = popup_destroy,
+	.grab = popup_grab,
+	.reposition = popup_reposition,
+};
+
+/*
+ * xdg_positioner, which a popup cannot be created without.
+ *
+ * Its absence was not a missing feature so much as a missing object: the
+ * interface table had destroy, get_xdg_surface and pong and no
+ * create_positioner, so the very first thing any popup client does - ask for a
+ * positioner - met a NULL request handler. libwayland's line for that is
+ * "listener function for opcode 1 of xdg_wm_base is NULL", and it drops the
+ * client, which presents as a compositor that hangs on the first popup.
+ *
+ * A positioner says where the popup goes relative to its parent's anchor
+ * rectangle. Toplevels here are always the whole panel at the origin, so the
+ * geometry reduces to placing the popup by its gravity relative to that anchor
+ * rectangle - correct enough to put a menu where the client asked, without a
+ * window manager's worth of geometry behind it.
+ */
+struct positioner {
+	int32_t w, h;                    /* size */
+	int32_t ax, ay, aw, ah;          /* anchor rectangle */
+	int32_t ox, oy;                  /* offset */
+	uint32_t anchor, gravity;
+};
+
+/*
+ * Turning a positioner into a rectangle on the panel.
+ *
+ * The anchor says which point of the parent's anchor rectangle the popup
+ * attaches to; the gravity says which point of the popup lands there. Both
+ * are 3x3 grids, and composing them is nine cases rather than arithmetic -
+ * the enum values are not a bit mask, so the obvious shift-and-mask is wrong
+ * and silently gives LEFT a horizontal coordinate of "none".
+ *
+ * The parent is always the whole panel at the origin here, so the anchor
+ * rectangle's own offset is the whole answer and no window geometry is
+ * needed.
+ */
+static void popup_place(struct positioner *pos, int *out_x, int *out_y)
+{
+	int ax = pos->ax, ay = pos->ay;
+	int x = 0, y = 0;
+
+	/* Horizontal: anchor_x is the point in the parent, gravity_x shifts the
+	 * popup so that its matching edge or middle meets it. */
+	switch (pos->anchor) {
+	case XDG_POSITIONER_ANCHOR_LEFT:
+	case XDG_POSITIONER_ANCHOR_TOP_LEFT:
+	case XDG_POSITIONER_ANCHOR_BOTTOM_LEFT:
+		ax = pos->ax;
+		break;
+	case XDG_POSITIONER_ANCHOR_RIGHT:
+	case XDG_POSITIONER_ANCHOR_TOP_RIGHT:
+	case XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT:
+		ax = pos->ax + pos->aw;
+		break;
+	case XDG_POSITIONER_ANCHOR_TOP:
+	case XDG_POSITIONER_ANCHOR_BOTTOM:
+		ax = pos->ax + pos->aw / 2;
+		break;
+	default:
+		ax = pos->ax;
+		break;
+	}
+
+	switch (pos->anchor) {
+	case XDG_POSITIONER_ANCHOR_TOP:
+	case XDG_POSITIONER_ANCHOR_TOP_LEFT:
+	case XDG_POSITIONER_ANCHOR_TOP_RIGHT:
+		ay = pos->ay;
+		break;
+	case XDG_POSITIONER_ANCHOR_BOTTOM:
+	case XDG_POSITIONER_ANCHOR_BOTTOM_LEFT:
+	case XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT:
+		ay = pos->ay + pos->ah;
+		break;
+	case XDG_POSITIONER_ANCHOR_LEFT:
+	case XDG_POSITIONER_ANCHOR_RIGHT:
+		ay = pos->ay + pos->ah / 2;
+		break;
+	default:
+		ay = pos->ay;
+		break;
+	}
+
+	switch (pos->gravity) {
+	case XDG_POSITIONER_GRAVITY_LEFT:
+	case XDG_POSITIONER_GRAVITY_TOP_LEFT:
+	case XDG_POSITIONER_GRAVITY_BOTTOM_LEFT:
+		x = ax;
+		break;
+	case XDG_POSITIONER_GRAVITY_RIGHT:
+	case XDG_POSITIONER_GRAVITY_TOP_RIGHT:
+	case XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT:
+		x = ax - pos->w;
+		break;
+	case XDG_POSITIONER_GRAVITY_TOP:
+	case XDG_POSITIONER_GRAVITY_BOTTOM:
+		x = ax - pos->w / 2;
+		break;
+	default:
+		x = ax;
+		break;
+	}
+
+	switch (pos->gravity) {
+	case XDG_POSITIONER_GRAVITY_TOP:
+	case XDG_POSITIONER_GRAVITY_TOP_LEFT:
+	case XDG_POSITIONER_GRAVITY_TOP_RIGHT:
+		y = ay;
+		break;
+	case XDG_POSITIONER_GRAVITY_BOTTOM:
+	case XDG_POSITIONER_GRAVITY_BOTTOM_LEFT:
+	case XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT:
+		y = ay - pos->h;
+		break;
+	case XDG_POSITIONER_GRAVITY_LEFT:
+	case XDG_POSITIONER_GRAVITY_RIGHT:
+		y = ay - pos->h / 2;
+		break;
+	default:
+		y = ay;
+		break;
+	}
+
+	*out_x = x + pos->ox;
+	*out_y = y + pos->oy;
+}
+
 static void xdg_surface_get_popup(struct wl_client *c, struct wl_resource *r,
 				 uint32_t id, struct wl_resource *parent,
 				 struct wl_resource *positioner)
 {
-	(void)c; (void)id; (void)parent; (void)positioner;
-	wl_resource_post_error(r, XDG_SURFACE_ERROR_NOT_CONSTRUCTED,
-			       "popups are not implemented in lind");
+	struct surface *s = wl_resource_get_user_data(r);
+	struct wl_resource *pop;
+	struct positioner *pos = wl_resource_get_user_data(positioner);
+
+	if (!s)
+		return;
+	if (s->xdg_toplevel || s->xdg_popup) {
+		wl_resource_post_error(r, XDG_SURFACE_ERROR_ALREADY_CONSTRUCTED,
+				       "surface already has a role");
+		return;
+	}
+
+	/*
+	 * One popup at a time. Asking for a second one replaces the first:
+	 * clients that nest menus send this repeatedly and expect the older
+	 * one to go away.
+	 */
+	dismiss_popup();
+
+	pop = wl_resource_create(c, &xdg_popup_interface,
+				 xdg_popup_interface.version, id);
+	if (!pop)
+		return;
+	wl_resource_set_implementation(pop, &popup_impl, s, NULL);
+
+	s->xdg_popup = pop;
+	s->is_popup = 1;
+	s->role = ROLE_POPUP;
+	the_popup = s;
+
+	if (parent && parent != r)
+		s->popup_parent = parent;
+
+	/* The positioner is the client's statement of where this goes, and it
+	 * is fully parsed by now - every set_* request arrived before this
+	 * get_popup. Honouring it is the difference between a menu under the
+	 * button and a menu in the top-left corner. */
+	if (pos) {
+		s->popup_w = pos->w;
+		s->popup_h = pos->h;
+		popup_place(pos, &s->popup_x, &s->popup_y);
+
+		/*
+		 * Pull it back onto the panel.
+		 *
+		 * A positioner is a request, not a guarantee: it describes
+		 * where the popup would go if nothing were in the way, and
+		 * the compositor is obliged to keep it visible. Without this
+		 * a menu hanging off the top edge - which is what an
+		 * anchor rectangle near the top produces for a tall popup -
+		 * is simply never seen, and the client is left waiting for
+		 * input on something that is not there.
+		 *
+		 * Real constraint adjustment (flip, slide, resize) is not
+		 * implemented; sliding is the one that preserves the client's
+		 * size, so that is what this does. A popup taller than the
+		 * panel is placed at the top rather than centred, because a
+		 * negative coordinate cannot be blitted.
+		 */
+		if (s->popup_w && s->popup_w < drm.w)
+			s->popup_x = CLAMP(s->popup_x, 0,
+					   (int)drm.w - s->popup_w);
+		else
+			s->popup_x = 0;
+		if (s->popup_h && s->popup_h < drm.h)
+			s->popup_y = CLAMP(s->popup_y, 0,
+					   (int)drm.h - s->popup_h);
+		else
+			s->popup_y = 0;
+	} else {
+		s->popup_w = s->popup_h = 0;
+		s->popup_x = s->popup_y = 0;
+	}
 }
 
 static void xdg_surface_set_window_geometry(struct wl_client *c,
@@ -1905,6 +2259,7 @@ static void wm_base_get_xdg_surface(struct wl_client *c, struct wl_resource *r,
 				       "not a wl_surface");
 		return;
 	}
+
 	if (s->xdg_surface) {
 		wl_resource_post_error(r, XDG_WM_BASE_ERROR_ROLE,
 				       "surface already has an xdg role");
@@ -1920,8 +2275,133 @@ static void wm_base_get_xdg_surface(struct wl_client *c, struct wl_resource *r,
 	s->role = ROLE_TOPLEVEL;
 }
 
+static void pos_destroy(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c;
+	wl_resource_destroy(r);
+}
+
+static void pos_set_size(struct wl_client *c, struct wl_resource *r,
+			 int32_t width, int32_t height)
+{
+	struct positioner *p = wl_resource_get_user_data(r);
+
+	(void)c;
+	if (!p)
+		return;
+	if (width > 0)
+		p->w = width;
+	if (height > 0)
+		p->h = height;
+}
+
+static void pos_set_anchor_rect(struct wl_client *c, struct wl_resource *r,
+				int32_t x, int32_t y, int32_t width, int32_t height)
+{
+	struct positioner *p = wl_resource_get_user_data(r);
+
+	(void)c;
+	if (!p)
+		return;
+	p->ax = x;
+	p->ay = y;
+	p->aw = width;
+	p->ah = height;
+}
+
+static void pos_set_anchor(struct wl_client *c, struct wl_resource *r,
+			   uint32_t anchor)
+{
+	struct positioner *p = wl_resource_get_user_data(r);
+
+	(void)c;
+	if (p)
+		p->anchor = anchor;
+}
+
+static void pos_set_gravity(struct wl_client *c, struct wl_resource *r,
+			    uint32_t gravity)
+{
+	struct positioner *p = wl_resource_get_user_data(r);
+
+	(void)c;
+	if (p)
+		p->gravity = gravity;
+}
+
+static void pos_set_constraint_adjustment(struct wl_client *c,
+					  struct wl_resource *r,
+					  uint32_t adj)
+{
+	(void)c; (void)r; (void)adj;
+}
+
+static void pos_set_offset(struct wl_client *c, struct wl_resource *r,
+			   int32_t x, int32_t y)
+{
+	struct positioner *p = wl_resource_get_user_data(r);
+
+	(void)c;
+	if (!p)
+		return;
+	p->ox = x;
+	p->oy = y;
+}
+
+static void pos_set_reactive(struct wl_client *c, struct wl_resource *r)
+{
+	(void)c; (void)r;
+}
+
+static void pos_set_parent_size(struct wl_client *c, struct wl_resource *r,
+				int32_t w, int32_t h)
+{
+	(void)c; (void)r; (void)w; (void)h;
+}
+
+static void pos_set_parent_configure(struct wl_client *c, struct wl_resource *r,
+				     uint32_t serial)
+{
+	(void)c; (void)r; (void)serial;
+}
+
+static const struct xdg_positioner_interface positioner_impl = {
+	.destroy = pos_destroy,
+	.set_size = pos_set_size,
+	.set_anchor_rect = pos_set_anchor_rect,
+	.set_anchor = pos_set_anchor,
+	.set_gravity = pos_set_gravity,
+	.set_constraint_adjustment = pos_set_constraint_adjustment,
+	.set_offset = pos_set_offset,
+	.set_reactive = pos_set_reactive,
+	.set_parent_size = pos_set_parent_size,
+	.set_parent_configure = pos_set_parent_configure,
+};
+
+static void wm_base_create_positioner(struct wl_client *c,
+				      struct wl_resource *r, uint32_t id)
+{
+	struct positioner *p;
+	struct wl_resource *pr;
+
+	(void)r;
+
+	p = xmalloc(sizeof(*p));
+	if (!p)
+		return;
+
+	pr = wl_resource_create(c, &xdg_positioner_interface,
+				xdg_positioner_interface.version, id);
+	if (!pr) {
+		free(p);
+		return;
+	}
+	wl_resource_set_implementation(pr, &positioner_impl, p, NULL);
+}
+
 static const struct xdg_wm_base_interface wm_base_impl = {
 	.destroy = wm_base_destroy,
+	.create_positioner = wm_base_create_positioner,
 	.get_xdg_surface = wm_base_get_xdg_surface,
 	.pong = wm_base_pong,
 };
