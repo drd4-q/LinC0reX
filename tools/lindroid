@@ -359,11 +359,24 @@ weston_ini() {
 	# usable mesa driver is kms_swrast and it wants DRI_DRI2. SDE does not
 	# implement that, so every DRI driver fails. pixman needs no GPU and
 	# presents through plain dumb buffers.
+	#
+	# repaint-window is a workaround, not a preference. This driver does
+	# not deliver vblank per frame - measured, see docs/vblank.md - so
+	# weston cannot measure frame timing and logs
+	#
+	#	Warning: computed repaint delay is insane: -158935 msec
+	#
+	# and then stops scheduling frames: a client renders one frame and the
+	# animation is frozen. Giving weston a fixed window removes the
+	# measurement it cannot make. It is the compositor compensating for a
+	# missing driver signal, not tuning.
 	[core]
 	backend=drm-backend.so
 	drm-device=card0
 	use-pixman=true
 	shell=kiosk-shell.so
+	repaint-window=16
+	idle-time=0
 	EOF
 }
 
