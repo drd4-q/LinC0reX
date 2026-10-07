@@ -30,3 +30,9 @@ out/
 # Staging directories used by the pmOS tools.
 *.zip
 *.img
+
+# Prebuilt binaries left over from earlier experiments. Nothing reads them:
+# the scripts unpack a boot image and work on the copy inside it, and the
+# kernel comes from ~/dm-kernel/out/arch/arm64/boot/Image.
+tools/kernel
+tools/ramdisk.cpio

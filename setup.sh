@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# Prepare a Darkmoon kernel tree for the Lindroid display-control driver.
+# Prepare a Darkmoon kernel tree for LinC0reX.
 #
-# Clones the base tree if needed, wires in KernelSU-Next, applies our patches
-# and drops the driver in.  Idempotent: re-running is a no-op once set up.
+# The display-control driver this installs is Lindroid's, carried over as
+# drivers/lindroid-drm/; we did not write it. Clones the base tree if needed,
+# wires in KernelSU-Next, applies our patches and drops the driver in.
+# Idempotent: re-running is a no-op once set up.
 #
 #   ./setup.sh [target-dir]     default: ~/dm-kernel
 #
@@ -48,7 +50,7 @@ for p in "$HERE"/patches/*.patch; do
     fi
 done
 
-say "Installing the Lindroid driver"
+say "Installing the lindroid-drm driver (Lindroid's, not ours)"
 mkdir -p drivers/lindroid-drm
 cp -r "$HERE/drivers/lindroid-drm/." drivers/lindroid-drm/
 echo "driver copied"
@@ -63,7 +65,7 @@ cat <<'EOF'
 
 Done. Build with:
 
-    cd <target> && ./build.sh Lindroid
+    cd <target> && ./build.sh LinC0reX
 
 The flashable zip lands next to build.sh.
 

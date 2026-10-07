@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install.sh - one-shot builder for Lindroid on Xiaomi POCO X5 5G / Redmi Note 12 5G
+# install.sh - one-shot builder for LinC0reX on Xiaomi POCO X5 5G / Redmi Note 12 5G
 #
 # Takes a bare Debian/Ubuntu machine to a flashable pmOS zip that boots this
 # phone with a working display, touch and a permanent root shell over USB.

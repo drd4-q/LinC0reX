@@ -1,4 +1,4 @@
-# Lindroid display control
+# LinC0reX display control
 
 Kernel-side support for driving the phone display from a normal Linux
 userspace, so a Wayland compositor running Phosh or GNOME Mobile can take the
