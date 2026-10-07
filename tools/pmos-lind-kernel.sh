@@ -10,13 +10,13 @@
 # that nobody can reach because the panel is never programmed.
 #
 # The fix is the kernel, not the userland. Ours is the only one that can drive
-# the panel, and it already carries the vendor DTB appended to the Image - the
-# same Image that anykernel flashes today. So:
+# the panel. So:
 #
 #   1. unpack the pmOS boot.img
 #   2. replace the kernel with ours
-#   3. drop the mainline dtb: ours is inside the Image, and a second dtb in the
-#      second slot is what the mainline dtb would have been used for
+#   3. drop the mainline dtb, if pmbootstrap put one there: the panel tree is
+#      not ours to supply, and a second dtb is what the mainline one would have
+#      been used for
 #   4. fix the command line - pmOS's asks for SimpleFB and has no earlycon
 #      that lands on a UART we have
 #   5. repack with the header parameters pmbootstrap used, so the result is
@@ -25,6 +25,11 @@
 # Verified against this device: header v3, os_version 17.0.0, os_patch_level
 # 2026-08, page size 4096 - all matching the stock boot.img, which is what
 # deviceinfo_generate_bootimg already declares.
+#
+# Our Image carries no device tree of its own. See docs/pmos-dtb.md: it has zero
+# FDT blobs, and in out/System.map __dtb_start equals __dtb_end, so the builtin
+# dtb is empty. The panel tree comes from outside boot.img, via the bootloader.
+# Anything that claims our Image embeds the vendor dtb is wrong.
 #
 # Usage:
 #   pmos-lind-kernel.sh <pmos-boot.img> [our-Image] [out.img]
@@ -39,12 +44,33 @@ OUT="${3:-${BOOTIMG%.img}-lind.img}"
 
 MAGISKBOOT="${MAGISKBOOT:-$HOME/ak3-darkmoon/tools/magiskboot}"
 
+# magiskboot in ak3-darkmoon is a 32-bit ARM binary, so on x86_64 it only runs
+# under qemu-arm. binfmt_misc is not registered for little-endian arm here
+# (only armeb), so the failure is an immediate "Exec format error" that looks
+# like a broken binary rather than a missing emulator.
+#
+# The architecture is read from the ELF header rather than by trying to run it:
+# asking the binary whether it works is unreliable, because magiskboot prints
+# its usage and exits non-zero when given no usable arguments.
+mb() {
+	case "$(file -b "$MAGISKBOOT")" in
+	*ARM*)
+		command -v qemu-arm >/dev/null 2>&1 ||
+			die "magiskboot собран под ARM, а qemu-arm не найден"
+		qemu-arm "$MAGISKBOOT" "$@"
+		;;
+	*)
+		"$MAGISKBOOT" "$@"
+		;;
+	esac
+}
+
 say() { printf '%s\n' "$*"; }
 die() { printf 'ошибка: %s\n' "$*" >&2; exit 1; }
 
 [ -f "$BOOTIMG" ] || die "нет $BOOTIMG"
 [ -f "$OUR_IMAGE" ] || die "нет нашего ядра $OUR_IMAGE"
-[ -x "$MAGISKBOOT" ] || die "нет magiskboot по пути $MAGISKBOOT"
+[ -f "$MAGISKBOOT" ] || die "нет magiskboot по пути $MAGISKBOOT"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -54,7 +80,7 @@ trap 'rm -rf "$WORK"' EXIT
 # get wrong and magiskboot reports neither - it unpacks happily into the wrong
 # place and the header simply is not there.
 say "=== исходный boot.img"
-( cd "$WORK" && "$MAGISKBOOT" unpack -h "$BOOTIMG" ) >/dev/null 2>&1 ||
+( cd "$WORK" && mb unpack -h "$BOOTIMG" ) >/dev/null 2>&1 ||
 	die "magiskboot не распаковал $BOOTIMG"
 
 [ -f "$WORK/kernel" ] || die "после распаковки нет kernel - образ не тот"
@@ -91,9 +117,13 @@ if grep -q '^cmdline=' "$WORK/header"; then
 	say "=== cmdline заменён на рабочий для этого ядра"
 fi
 
-# repack takes the original image as the source of truth for anything not
-# extracted, then the output path.
-"$MAGISKBOOT" repack "$BOOTIMG" "$OUT" >/dev/null 2>&1 ||
+# repack takes the original image as the source of truth for the header, and
+# takes every component it finds in the *current* directory. It has to run
+# inside $WORK: called from anywhere else it finds no components, silently
+# falls back to the original image, and produces a byte-identical copy that
+# still carries the mainline kernel. Nothing warns about this - the output is
+# a valid boot image, just the wrong one.
+( cd "$WORK" && mb repack "$BOOTIMG" "$OUT" ) >/dev/null 2>&1 ||
 	die "magiskboot не пересобрал"
 
 say "=== готово: $OUT ($(stat -c%s "$OUT") байт)"
@@ -102,7 +132,7 @@ say ""
 say "=== проверка"
 unpack_tmp=$(mktemp -d)
 trap 'rm -rf "$WORK" "$unpack_tmp"' EXIT
-( cd "$unpack_tmp" && "$MAGISKBOOT" unpack -h "$OUT" ) >/dev/null 2>&1
+( cd "$unpack_tmp" && mb unpack -h "$OUT" ) >/dev/null 2>&1
 if cmp -s "$unpack_tmp/kernel" "$OUR_IMAGE"; then
 	say "  ядро совпадает с нашим: ДА"
 else

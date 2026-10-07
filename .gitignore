@@ -20,3 +20,13 @@ __pycache__/
 tools/xdg-shell-server-protocol.h
 tools/xdg-shell-client-protocol.h
 tools/xdg-shell-protocol.c
+
+# Build artefacts from install.sh / build-zip.sh.
+# out/ is several GB: boot images are 128 MB each and the recovery zips are
+# around 290 MB. GitHub rejects anything over 100 MB, so a `git add .` here
+# fails outright. They are reproducible with ./install.sh.
+out/
+
+# Staging directories used by the pmOS tools.
+*.zip
+*.img
