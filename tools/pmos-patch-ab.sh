@@ -120,6 +120,74 @@ open(p, 'w', encoding='utf-8').write(s)
 print(f'  BOOT_PARTITION -> {part}')
 PY
 
+# 3. msdos table on a 4Kn device.
+#    parted writes the partition table in units of the device's logical sector,
+#    which on this phone is 4096 bytes, but the msdos format stores LBAs in
+#    512-byte units and nothing rescales them. The result is a table that is
+#    off by a factor of 8: parted meant p1 to start at 2048s = 8 MiB and it
+#    wrote 2048, which a 512-byte reader takes as 1 MiB.
+#
+#    The filesystems are created at the right byte offsets anyway, so the
+#    kernel finds the table, mounts partitions at the wrong places, and
+#    pmOS's mount_subpartitions() never sees pmOS_root. Measured on the phone:
+#
+#        fdisk -l /dev/sda19      p1 2048    60416   p2 62464  58313472
+#        magic at 8 MiB + 1080    53 ef     <- the real ext2 superblock
+#        magic at 30.5 MiB +1080  1a f8     <- what the table points at
+#
+#    Rescaling by 8 puts p1 at 8 MiB and p2 at 244 MiB, which is where the
+#    filesystems really are, and is the same layout the working install used.
+python3 - "$F_FUN" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+
+FUNC = r'''
+# --- lind: parted on a 4Kn device writes 4096-byte LBAs into the msdos table
+# The msdos format stores LBAs in 512-byte units, and nothing rescales them.
+# On a device whose logical sector is 4096 bytes the table therefore lands
+# 8x too low and the kernel mounts the partitions at the wrong offsets.
+lind_fix_mbr_4kn() {
+	_d="$1"
+	_lb=$(cat "/sys/block/$(basename "$_d")/queue/logical_block_size" 2>/dev/null || echo 512)
+	[ "$_lb" = "4096" ] || return 0
+	echo "lind: logical sector is 4096, rescaling the msdos table by 8"
+	dd if="$_d" bs=1 skip=446 count=64 2>/dev/null | od -An -v -tu1 | awk '
+	function le32(o) { return b[o] + b[o+1]*256 + b[o+2]*65536 + b[o+3]*16777216 }
+	function put32(o, v) { b[o]=v%256; b[o+1]=int(v/256)%256; b[o+2]=int(v/65536)%256; b[o+3]=int(v/16777216)%256 }
+	{ for (i = 1; i <= NF; i++) b[n++] = $i }
+	END {
+		for (e = 0; e < 64; e += 16) {
+			s = le32(e + 8); c = le32(e + 12)
+			if (s > 0) put32(e + 8, s * 8)
+			if (c > 0) put32(e + 12, c * 8)
+		}
+		for (i = 0; i < 64; i++) printf "%c", b[i]
+	}' > /tmp/lind_mbr.bin 2>/dev/null
+	if [ ! -s /tmp/lind_mbr.bin ]; then
+		echo "lind: rescale produced nothing, leaving the table untouched"
+		return 0
+	fi
+	dd if=/tmp/lind_mbr.bin of="$_d" bs=1 seek=446 count=64 conv=fsync 2>/dev/null
+	rm -f /tmp/lind_mbr.bin
+	echo "lind: table rescaled"
+}
+'''
+
+if 'lind_fix_mbr_4kn' not in s:
+    s = s.replace('\npartition_install_device() {', FUNC + '\npartition_install_device() {', 1)
+    old = '\tdone\n\tpartprobe\n'
+    new = '\tdone\n\tlind_fix_mbr_4kn "$INSTALL_DEVICE"\n\tpartprobe\n'
+    if old not in s:
+        sys.exit('ОШИБКА: не нашёл "done\\n\\tpartprobe" в partition_install_device')
+    s = s.replace(old, new, 1)
+    print('  lind_fix_mbr_4kn добавлена в partition_install_device')
+else:
+    print('  lind_fix_mbr_4kn уже на месте')
+
+open(p, 'w', encoding='utf-8').write(s)
+PY
+
 say "=== стало"
 grep -n "INSTALL_PARTITION" "$F_OPT" | sed 's/^/  /'
 grep -n "PARTLABEL=" "$F_FUN" | sed 's/^/  /'

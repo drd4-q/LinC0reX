@@ -94,6 +94,8 @@ fastboot flash boot ~/kernel_xiaomi_stone/stock/boot.img
 **What went wrong, and why it is written down**
 
 - [Boot failure](docs/pmos-boot-failure.md) — the header version trap
+- [Installer writes an 8x too small partition table](docs/installer-mbr-4kn.md)
+  — parted, 4096-byte sectors, and why nothing caught it
 - [Device tree](docs/pmos-dtb.md) — where the tree comes from
 - [Page flip root cause](docs/page-flip-root-cause.md) — a kernel patch
   and a flash spent on a wrong diagnosis
